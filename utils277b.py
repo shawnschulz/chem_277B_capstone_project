@@ -95,7 +95,7 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, title: str):
 
     return Conf_Matrix, ax
 
-def principle_component_analysis(train_data: pd.DataFrame, test_data: pd.DataFrame):
+def principal_component_analysis(train_data: pd.DataFrame, test_data: pd.DataFrame):
    
     ''' 
     Inputs: 
@@ -114,7 +114,7 @@ def principle_component_analysis(train_data: pd.DataFrame, test_data: pd.DataFra
     # converts numpy array to DataFrame
     if type(train_data) == np.ndarray:
         train_data = pd.DataFrame(train_data)
-    elif type(test_data) == np.ndarray:
+    if type(test_data) == np.ndarray:
         test_data = pd.DataFrame(test_data)
    
     # Runs PCA 
