@@ -35,6 +35,8 @@ class NuclearReactorSimulator:
 
         # Simulation parameters
         self.monitoring_pressure = True         # Sanity check to avoid overpressure casualty
+        self.vent_gas_in_progress = False       # Are we venting gas (reducing TG)
+        self.vent_gas_start = None              # Venting start time
         self.charging_in_progress = False       # Are we currently charging to the plant
         self.charging_start = None              # Charging start time
         self.charging_duration = None           # Charging duration based on number of pumps.
@@ -149,27 +151,27 @@ class NuclearReactorSimulator:
         ###########################################################################
         # Determine if any of the reactor plant parameters are outside
         # of their operating bands (0 = Rx safe, 1 = Rx not safe).
-                if self.pH < 10.0 or self.pH > 11.0:
-                    self.status = 1
-                elif self.power > 100:
-                    self.status = 1
-                elif self.pressure < 2000 or self.pressure > 2200:
-                    self.status = 1
-                elif self.total_gas > 75:
-                    self.status = 1
-                elif self.temp < 485 or self.temp > 515:
-                    self.status = 1
-                elif self.h2 < 10 or self.h2 > 60:
-                    self.status = 1
-                elif self.radioactivity > 15:
-                    self.status = 1
-                else:
-                    self.status = 0
+        if self.pH < 10.0 or self.pH > 11.0:
+            self.status = 1
+        elif self.power > 100:
+            self.status = 1
+        elif self.pressure < 2000 or self.pressure > 2200:
+            self.status = 1
+        elif self.total_gas > 75:
+            self.status = 1
+        elif self.temp < 485 or self.temp > 515:
+            self.status = 1
+        elif self.h2 < 10 or self.h2 > 60:
+            self.status = 1
+        elif self.radioactivity > 15:
+            self.status = 1
+        else:
+            self.status = 0
 
     def plant_maintenance(self):
         # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
         # to prevent an overpressure casualty while performing the chemical addition.
-        self.monitoring_pressure = random.choices([True, False], weights = [80, 20])[0]
+        self.monitoring_pressure = random.choices([True, False], weights = [90, 10])[0]
 
         # If the reactor plant pressure is being monitored, do not charge until pressure is
         # less than 2060 psi, otherwise charge immediately.
@@ -178,8 +180,16 @@ class NuclearReactorSimulator:
         elif not self.monitoring_pressure:
             chemical_addition()
 
-        
-        
+        if self.monitoring_pressure and \
+                self.total_gas > 70 and \
+                not self.charging_in_progress and \
+                self.pressure > 2150:
+            vent_gas()
+        elif not self.monitoring_pressure and \
+                not self.charging_in_progress and \
+                self.total_gas > 70:
+            vent_gas()
+
         def chemical_addition():
             """
             Function to add chemicals for pH or Hydrogen after a casualty
@@ -198,23 +208,75 @@ class NuclearReactorSimulator:
                 # Give some probability of an injection of air casualty occuring during the chemical addition
                 self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
 
+                # Update variables linearly during chemical addition.
+                elapsed_time = self.time_now - self.charging_start
+                if elapsed_time <= self.charging_duration:
 
-            # Case for adding hydrogen.
-            #something for h2
-            pass
+                    # Update pH linearly with time while charging. 
+                    self.pH += 0.6 * elapsed_time / self.charging_duration
 
-        def vent_gas(self):
-            pass
+                    # Update pressure while charging.
+                    Q = 30 * pumps          # Charging rate
+                    pressure_increase = 3000 * Q * elapsed_time / (20000 + Q * elapsed_time)
+                    self.pressure += pressure_increase
+
+                    # End the chemical addition after the duration.
+                    if elapsed_time >= self.charging_duration:
+                        self.charging_in_progress = False
+
+            # Case for adding hydrogen
+            elif self.h2 < 10 and not self.charging_in_progress:
+                self.charging_in_progress = True                        # Tag for charging is true.
+                self.charging_start = self.time_now
+                self.charging_duration = {1:30,
+                                          2:20,
+                                          3:10}[pumps]
+                
+                # Give some probability of an injection of air casualty occuring during the chemical addition
+                self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
+
+                # Update variables linearly during chemical addition.
+                elapsed_time = self.time_now - self.charging_start
+                if elapsed_time <= self.charging_duration:
+
+                    # Update h2 linearly with time while charging. 
+                    self.h2 += 40 * elapsed_time / self.charging_duration
+
+                    # Update pressure while charging.
+                    Q = 30 * pumps          # Charging rate
+                    pressure_increase = 3000 * Q * elapsed_time / (20000 + Q * elapsed_time)
+                    self.pressure += pressure_increase
+
+                    # End the chemical addition after the duration.
+                    if elapsed_time >= self.charging_duration:
+                        self.charging_in_progress  = False
+
+        def vent_gas():
+            self.vent_gas_in_progress = True
+            self.vent_gas_start = self.time_now
+            elapsed_time = self.time_now - self.vent_gas_start
+
+            # Reduce total gas to 60 from some value greater than 70.
+            self.total_gas = max(60, self.total_gas - 1 * elapsed_time)
+
+            # End the venting of gas after reaching goal.
+            if self.total_gas <= 60:
+                self.vent_gas_in_progress = False
 
     def casualty(self):
         """
         Function to handle casualties
         """
         # Determine some random probability each iteration for a casualty to occur
-        self.resin_overheat_flag = random.choices([True, False], weights = [5, 95])[0]
-        self.fuel_element_failure_flag = random.choices([True, False], weights = [5, 95])[0]
+        casualties = ['resin_overheat', 'fuel_element_failure']
+        select_casualty = random.choices(casualties + [None], weights = [5, 5, 90])[0]
+        
+        if select_casualty == 'resin_overheat':
+            self.resin_overheat_flag = True
+        elif select_casualty == 'fuel_element_failure':
+            self.fuel_element_failure_flag = True
 
-        if self.injection_of_air_flag == True:
+        if self.injection_of_air_flag == True and self.status == 0 and self.time_since_safe > 60:
             injection_of_air()
         if self.resin_overheat_flag == True:
             resin_overheat()
@@ -222,8 +284,29 @@ class NuclearReactorSimulator:
             fuel_element_failure()
         
         def injection_of_air():
-            self.injection_of_air_degree = False
-            pass
+            # Air is added while charging
+            elapsed_time = self.time_now - self.charging_start
+
+            # Determine if it is a small or large air injection (True = small, False = large)
+            self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
+
+            # Small injection of air casualty
+            if self.injection_of_air_degree:
+                h2_decrease = random.uniform(10, self.pH)        
+                self.h2 = h2_decrease * elapsed_time / self.charging_duration
+                self.total_gas = calc_total_gas()
+
+                if self.h2 < 10 or self.total_gas > 75:
+                    self.status = 1     # Reactor not safe
+
+            # Large injection of air casualty
+            else:
+                h2_decrease = self.h2       # Drop H2 to zero by the time charging is complete.
+                self.h2 = h2_decrease * elapsed_time / self.charging_duration
+                self.total_gas = self.calc_total_gas()
+
+                if self.h2 < 10 or self.total_gas > 75:
+                    self.status = 1     # Reactor not safe
 
         def resin_overheat():
             self.resin_overheat_degree = False          # Determination for small or large
