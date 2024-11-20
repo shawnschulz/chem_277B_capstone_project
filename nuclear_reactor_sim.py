@@ -15,12 +15,14 @@ class NuclearReactorSimulator:
         self.radioactivity = radioactivity # (rad)
         self.time_step = 1 # (days)
         self.status = 0 # safe
+
         self._control_band = { # control band ranges
             "pH": [10,11], 
             "hydrogen": [10, 60],
             "temp": [485, 515],
             "pressure": [1900, 2100]
             }
+
 
         self.data_dict = {
             "Time": [],
@@ -111,6 +113,7 @@ class NuclearReactorSimulator:
         # # 3. Return stored data
         # return self.get_data(filename)
 
+
     def resin_overheating_small(self, time, pH_increase_rate, pH_decrease_rate, increase_time_ratio):
 
         '''
@@ -162,6 +165,7 @@ class NuclearReactorSimulator:
             
             if value[0] < feature_band < value[1]:
                 self.status = 1
+
 
     def chemical_addition(self):
         pass
