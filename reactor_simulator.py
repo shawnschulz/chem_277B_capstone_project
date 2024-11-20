@@ -133,8 +133,11 @@ class NuclearReactorSimulator:
             """
             if self.charging_in_progress:
                 self.plant_maintenance()
-            else:
-                 pass   # Calculate pressure as a function of time.
+            else: # Calculate pressure as a function of time.
+                # pressure osscilates +/- 100, amplitude = 100
+                # midpoint of pressure range, offset = 2100
+                # 60 minutes complete 1 oscilation, freq = pi/30 * t
+                 return 100 * np.sin((np.pi/30) * self.time_now) + 2100
         self.pressure = calc_pressure()
 
         ###########################################################################
