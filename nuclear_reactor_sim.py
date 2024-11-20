@@ -16,6 +16,14 @@ class NuclearReactorSimulator:
         self.time_step = 1 # (days)
         self.status = 0 # safe
 
+        self._control_band = { # control band ranges
+            "pH": [10,11], 
+            "hydrogen": [10, 60],
+            "temp": [485, 515],
+            "pressure": [1900, 2100]
+            }
+
+
         self.data_dict = {
             "Time": [],
             "pH": [], 
@@ -105,11 +113,59 @@ class NuclearReactorSimulator:
         # # 3. Return stored data
         # return self.get_data(filename)
 
-    def resin_overheating_small(self):
-        pass
+
+    def resin_overheating_small(self, time, pH_increase_rate, pH_decrease_rate, increase_time_ratio):
+
+        '''
+        - pH increases then decreases
+        - reactor can become unsafe if control band out of range
+        '''
+
+        # process each time step
+        increase_time = increase_time_ratio * time
+        decrease_time = time - increase_time
         
-    def resin_overheating_large(self):
-        pass 
+        # update pH and time
+        self.time_step += time
+        self.pH += pH_increase_rate * increase_time  
+        self.pH -= pH_decrease_rate * decrease_time
+        
+        # classify reactor saftey as unsafe if control band is exceeded
+        for key, value in self._control_band.items():  
+            feature_band = getattr(self, key)
+            
+            if value[0] < feature_band < value[1]:
+                self.status = 1
+        
+            
+
+        
+    def resin_overheating_large(self, time, pH_increase_rate, r_increase_rate, 
+                                r_decrease_rate, r_increase_time_ratio):
+        '''
+        - pH increases
+        - reactor can become unsafe if control band out of range
+        - radioactivity increases then decreases
+        '''
+    
+        # process each time step
+        r_increase_time = r_increase_time_ratio * time
+        r_decrease_time = time - r_increase_time
+            
+            
+        # update pH radioactivity and time
+        self.time_step += time
+        self.pH += pH_increase_rate * time 
+        self.radioactivity += r_increase_rate * r_increase_time
+        self.radioactivity -= r_decrease_rate * r_decrease_time
+        
+        # classify reactor saftey as unsafe if control band is exceeded
+        for key, value in self._control_band.items():        
+            feature_band = getattr(self, key)  
+            
+            if value[0] < feature_band < value[1]:
+                self.status = 1
+
 
     def chemical_addition(self):
         pass
