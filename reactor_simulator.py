@@ -149,22 +149,22 @@ class NuclearReactorSimulator:
         ###########################################################################
         # Determine if any of the reactor plant parameters are outside
         # of their operating bands (0 = Rx safe, 1 = Rx not safe).
-                if self.pH < 10.0 or self.pH > 11.0:
-                    self.status = 1
-                elif self.power > 100:
-                    self.status = 1
-                elif self.pressure < 2000 or self.pressure > 2200:
-                    self.status = 1
-                elif self.total_gas > 75:
-                    self.status = 1
-                elif self.temp < 485 or self.temp > 515:
-                    self.status = 1
-                elif self.h2 < 10 or self.h2 > 60:
-                    self.status = 1
-                elif self.radioactivity > 15:
-                    self.status = 1
-                else:
-                    self.status = 0
+        if self.pH < 10.0 or self.pH > 11.0:
+            self.status = 1
+        elif self.power > 100:
+            self.status = 1
+        elif self.pressure < 2000 or self.pressure > 2200:
+            self.status = 1
+        elif self.total_gas > 75:
+            self.status = 1
+        elif self.temp < 485 or self.temp > 515:
+            self.status = 1
+        elif self.h2 < 10 or self.h2 > 60:
+            self.status = 1
+        elif self.radioactivity > 15:
+            self.status = 1
+        else:
+            self.status = 0
 
     def plant_maintenance(self):
         # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
@@ -222,8 +222,29 @@ class NuclearReactorSimulator:
             fuel_element_failure()
         
         def injection_of_air():
-            self.injection_of_air_degree = False
-            pass
+            # Air is added while charging
+            elapsed_time = self.time_now - self.charging_start
+
+            # Determine if it is a small or large air injection (True = small, False = large)
+            self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
+
+            # Small injection of air casualty
+            if self.injection_of_air_degree:
+                h2_decrease = random.uniform(10, self.pH)        
+                self.h2 = h2_decrease * elapsed_time / self.charging_duration
+                self.total_gas = calc_total_gas()
+
+                if self.h2 < 10 or self.total_gas > 75:
+                    self.status = 1     # Reactor not safe
+
+            # Large injection of air casualty
+            else:
+                h2_decrease = self.h2       # Drop H2 to zero by the time charging is complete.
+                self.h2 = h2_decrease * elapsed_time / self.charging_duration
+                self.total_gas = self.calc_total_gas()
+
+                if self.h2 < 10 or self.total_gas > 75:
+                    self.status = 1     # Reactor not safe
 
         def resin_overheat():
             self.resin_overheat_degree = False          # Determination for small or large
