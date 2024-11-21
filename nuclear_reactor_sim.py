@@ -167,12 +167,48 @@ class NuclearReactorSimulator:
                 self.status = 1
 
 
-    def chemical_addition(self):
-        pass
+    def chemical_addition(self, charging_rate, duration, start_pressure):
+        volume = 20000
+        psi = 3e3
 
-    def normal_conditions(self):
-        pass
+        for d in range(duration):
+            pressure_change = psi * (charging_rate * d) / (volume + charging_rate * d)
+            self.pressure = start_pressure + pressure_change
+
+            #check if over pressure
+            if self.pressure > 220:
+                self.status = 1
+            else:
+                self.status = 0
+            self.update_temperature(d)
+            self.set_data(d, "Chemical Addition")
+
         
+
+    def normal_conditions(self, duration):
+        for d in range(duration):
+            self.update_temperature(d)
+            self.update_pressure(d)
+            self.pH = self.calc_pH(d)
+            self.h2 = self.calc_hydrogen() # val based on reactors current pressure
+            self.total_gas = self.calc_total_gas()# ^ don't depend on time
+            self.set_data(d, "Normal Operation")
+
+    def update_temperature(self, time_step):
+        # Oscillation between 485°F and 515°F
+        mid_temp = 500
+        amplitude = 15
+        period = 24  
+        self.temp = mid_temp + amplitude * np.sin(2 * np.pi * time_step / period)
+
+    def update_pressure(self, time_step):
+        # Oscillation between 2000 psi and 2200 psi
+        mid_pressure = 2100
+        amplitude = 100
+        period = 24 
+        self.pressure = mid_pressure + amplitude * np.sin(2 * np.pi * time_step / period)
+
+
     
     def set_data(self, t, condition):
         """Assign data"""
@@ -191,3 +227,4 @@ class NuclearReactorSimulator:
         data = pd.DataFrame.from_dict(self.data_dict)
         data.to_csv(filename)
         return pd.DataFrame.from_dict(self.data_dict)
+
