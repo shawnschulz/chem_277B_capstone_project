@@ -133,7 +133,8 @@ class NuclearReactorSimulator:
             """
             if self.charging_in_progress:
                 self.plant_maintenance()
-            pass
+            else:
+                 pass   # Calculate pressure as a function of time.
         self.pressure = calc_pressure()
 
         ###########################################################################
