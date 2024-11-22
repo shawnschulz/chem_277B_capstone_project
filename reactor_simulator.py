@@ -96,6 +96,11 @@ class NuclearReactorSimulator:
          injection of air casualty.
          """
          pass
+    def get_data(self, filename):
+        """Get data for Simulator and save as CSV and return DataFrame"""
+        data = pd.DataFrame.from_dict(self.data_dict)
+        data.to_csv(filename)
+        return pd.DataFrame.from_dict(self.data_dict)
 
     def reactor_plant_parameters(self):
         """
