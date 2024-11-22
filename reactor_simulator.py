@@ -313,8 +313,18 @@ class NuclearReactorSimulator:
             pass
 
         def fuel_element_failure():
-            self.fuel_element_failure_degree = False    # Determination for small or large
-            pass
+            # Determine small or large fuel element failure (true = small, false = large)
+            self.fuel_element_failure_degree = random.choices([True, False], weights = [60, 40])[0]
+            
+            if self.fuel_element_failure_degree: # Small fuel element failure
+                self.radioactivity += random.uniform(10, 50)
+            
+            else: # Large fuel element failure
+                self.radioactivity += random.uniform(100, 500)
+
+            # Recalculate power and pH based on new radioacitivty
+            self.power = 100 * (1 - np.exp(-self.radioactivity / 10)) # exponential relationship
+            self.reactor_plant_parameters()
 
         
             
