@@ -90,12 +90,6 @@ class NuclearReactorSimulator:
         self.data_dict["Radioactivity"].append(self.radioactivity)
         self.data_dict["Power"].append(self.power)
         self.data_dict["Reactor Safety"].append(self.status)
-    def calc_total_gas(self):
-         """
-         Function to calculate total gas during normal operation and
-         injection of air casualty.
-         """
-         pass
 
     def reactor_plant_parameters(self):
         """
@@ -116,7 +110,13 @@ class NuclearReactorSimulator:
         self.h2 = calc_h2()
 
         ###########################################################################
-        self.total_gas = self.calc_total_gas()
+        def calc_total_gas():
+             """
+             Function to calculate total gas during normal operation and
+             injection of air casualty.
+             """
+             pass
+        self.total_gas = calc_total_gas()
 
         ###########################################################################
         def calc_temperature():
@@ -294,7 +294,7 @@ class NuclearReactorSimulator:
             if self.injection_of_air_degree:
                 h2_decrease = random.uniform(10, self.pH)        
                 self.h2 = h2_decrease * elapsed_time / self.charging_duration
-                self.total_gas = self.calc_total_gas()
+                self.total_gas = calc_total_gas()
 
                 if self.h2 < 10 or self.total_gas > 75:
                     self.status = 1     # Reactor not safe
