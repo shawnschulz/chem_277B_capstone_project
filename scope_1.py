@@ -43,7 +43,7 @@ class NuclearReactorSimulator:
         self.add_h2 = False                     # Flag for adding hydrogen
         self.degas = False                      # Flag for degas
         self.time_now = 0                       # (minutes) Current simulation time
-        self.time_since_safe = None
+        self.time_since_safe = 0
 
         # Parameter Update Flags
         self.pressure_updated = False
@@ -84,11 +84,11 @@ class NuclearReactorSimulator:
         """Run the simulation over the specified time range"""
 
         while self.time_now < simulation_time:
-            # Update time for this iteration
-            self.time_now += 1
-
             # Append reactor plant parameters to the dictionary for the previous time step
             self.append_data()
+
+            # Update time for this iteration
+            self.time_now += 1
 
             # Some code to ensure the reactor has been safe for a while before another casualty starts
             if self.status == 0:
@@ -111,7 +111,8 @@ class NuclearReactorSimulator:
             # Update remaining reactor plant parameters for this iteration
             self.reactor_plant_parameters()
 
-            
+        # Save the data in a CSV file after all iterations are complete.
+        self.save_data("test_file")   
 
     ###################################################################################################
 
@@ -137,6 +138,12 @@ class NuclearReactorSimulator:
         self.data_dict["Fuel Element Failure Degree"].append(self.fuel_element_failure_degree)
         self.data_dict["Chemical Addition"].append(self.charging_in_progress)
         self.data_dict["Vent Gas"].append(self.vent_gas_in_progress)
+    
+    def save_data(self, filename):
+        """Get data for Simulator and save as CSV and return DataFrame"""
+        data = pd.DataFrame.from_dict(self.data_dict)
+        data.to_csv(filename)
+        return pd.DataFrame.from_dict(self.data_dict)
 
 #################################################################################################
 #################################################################################################
@@ -153,27 +160,21 @@ class NuclearReactorSimulator:
         # Calculate reactor plant parameters for this iteration if not already done.
         if not self.pressure_updated:
             self.pressure = self.calc_pressure()    # Pressure must be updated before h2 and total_gas
-            self.pressure_updated = True
         
         if not self.temp_updated:
             self.temp = self.calc_temperature()
-            self.temp_updated = True
 
         if not self.pH_updated:
             self.pH = self.calc_pH()
-            self.pH_updated = True
 
         if not self.total_gas_updated:    
             self.total_gas = self.calc_total_gas()  # Total gas must be updated before hydrogen
-            self.total_gas_updated = True
 
         if not self.h2_updated:
             self.h2 = self.calc_h2()
-            self.h2_updated = True
 
         if not self.radioactivity_updated:
             self.radioactivity = self.calc_radioactivity()
-            self.radioactivity_updated = True
 
         ###########################################################################
         # Set a trigger for plant maintenance to maintain controllable parameters
@@ -219,15 +220,19 @@ class NuclearReactorSimulator:
 
     def calc_pH(self):
         """
-        Function to calculate pH based on casualties, chemical addition, or normal operation
+        Function to calculate the value of pH for the current iteration. This function has
+        dependencies on the following flags:
+            - resin_overheat_flag
+            - add_pH and charging_in_progress
         """
         # Small resin overheat casualty
-        if self.resin_overheat_flag and not self.resin_overheat_degree:
-            pass
-
-        # Large resin overheat casualty
-        elif self.resin_overheat_flag and not self.resin_overheat_degree:
-            pass
+        if self.resin_overheat_flag:
+            # Small resin overheat casualty
+            if self.resin_overheat_degree:
+                pass
+            # Large resin overheat casualty
+            else:
+                pass
 
         # Charging pH chemicals
         elif self.add_pH and self.charging_in_progress:
@@ -241,13 +246,24 @@ class NuclearReactorSimulator:
 
         # Normal Operation
         else:
+            # pH varies as a function of time and reactor power
             self.pH += - 0.25 * self.time_now * np.exp(self.power / 100)
+
+        # Update the parameter flag
+        self.pH_updated = True
 
         return self.pH
     
     #######################################################################################
 
     def calc_h2(self):
+        """
+        Function to calculate the value of hydrogen for the current iteration. This function
+        has dependencies on the following flags:
+            - injection_of_air_flag
+            - add_h2 and charging_in_progress
+            - vent_gas_in_progress
+        """
         
         # Injection of air casualty
         if self.injection_of_air_flag:
@@ -287,12 +303,21 @@ class NuclearReactorSimulator:
             # Hydrogen varies as a function of pressure (Henrys Law)
             h2_conc_pressure = self.data_dict['Hydrogen'][-1] * ((self.pressure - self.data_dict['Pressure'][-1]) / 2200)
             self.h2 = self.data_dict['Hydrogen'][-1] + h2_conc_pressure 
-            
+        
+        # Update the parameter flag
+        self.h2_updated = True
+
         return self.h2
 
     ########################################################################################################
     
     def calc_total_gas(self):
+        """
+        Function to calculate the value of total gas for the current iteration. This function
+        has dependencies on the following flags:
+            - injection_of_air_flag
+            - vent_gas_in_progress
+        """
         # Injection of air casualty
         if self.injection_of_air_flag:
             # Small injection of air casualty
@@ -314,20 +339,34 @@ class NuclearReactorSimulator:
             if self.total_gas <= 60:
                 self.vent_gas_in_progress = False
                 self.degas = False
+                self.vent_gas_start = None
 
         # Normal operation
         else:
             # Total gas varies as a function of hydrogen
             pass
 
+        # Update the parameter flag
+        self.total_gas_updated = True
+
         return self.total_gas
     
     ######################################################################################################
 
     def calc_pressure(self):
+        """
+        Function to calculate the value of pressure for the current iteration. This function has
+        dependencies on the following flags:
+            - self.monitoring_pressure (calculated locally)
+            - self.add_pH and self.add_h2
+            - self.degas
+        This function will determine the value of the injection of air casualty flag when the
+        charging operation occurs.
+        """
+
         # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
         # to prevent an overpressure casualty while performing the chemical addition.
-        self.monitoring_pressure = random.choices([True, False], weights = [90, 10])[0]
+        self.monitoring_pressure = random.choices([True, False], weights = [95, 5])[0]
 
         # Charging operation
         if self.add_pH or self.add_h2:
@@ -342,7 +381,8 @@ class NuclearReactorSimulator:
             
                 # Commence Charging operation
                 self.charging_in_progress = True
-                self.charging_start = self.time_now
+                if self.charging_start is None:
+                    self.charging_start = self.time_now
                 
                 # Give some probability of an injection of air casualty occuring during the chemical addition
                 self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
@@ -369,6 +409,7 @@ class NuclearReactorSimulator:
                         self.charging_in_progress = False
                         self.add_h2 = False
                         self.add_pH = False
+                        self.charging_start = None
                 
         # Venting gas operation
         elif self.degas:
@@ -378,7 +419,9 @@ class NuclearReactorSimulator:
             # Perform degas 
             else:
                 self.vent_gas_in_progress = True
-                self.vent_gas_start = self.time_now
+                # Ensure start time is only calculated once
+                if self.vent_gas_start is None:
+                    self.vent_gas_start = self.time_now
                 elapsed_time = self.time_now - self.vent_gas_start
                 pressure_red_rate = 3
                 # Reduce pressure while venting
@@ -388,9 +431,17 @@ class NuclearReactorSimulator:
         else:
             pass
 
-        return #this_pressure
+        # Update the parameter flag
+        self.pressure_updated = True
+
+        return self.pressure
 
     def calc_temperature(self):
+        """
+        Function to calculate the value of temperature for the current iteration. This function
+        has dependencies on the following flags:
+            - resin_overheat_flag
+        """
         if self.resin_overheat_flag:
             # Small resin overheat casualty
             if self.resin_overheat_degree:
@@ -401,9 +452,19 @@ class NuclearReactorSimulator:
         # Normal operation
         else:
             pass
-        return #this_temperature
+
+        # Update the parameter flag
+        self.temp_updated = True
+
+        return self.temp
 
     def calc_radioactivity(self):
+        """
+        Function to calculate the value of radioactivity for the current iteration. This function
+        has dependencies on the following flags:
+            - fuel_element_failure_flag
+        """
+        # Fuel element failure casualty
         if self.fuel_element_failure_flag:
             # Small fuel element failure
             if self.fuel_element_failure_degree:
@@ -411,17 +472,29 @@ class NuclearReactorSimulator:
             # Large fuel element failure
             else:
                 pass
+
+        # Large injection of air casualty
+        elif self.injection_of_air_flag and not self.injection_of_air_degree:
+            pass
+
         # Normal Operation
         else:
             pass
-        return #this_radioactivity
+
+        # Update the parameter flag
+        self.radioactivity_updated = True
+
+        return self.radioactivity
 
 #####################################################################################################
 #####################################################################################################
 
     def casualty(self):
         """
-        Function to handle casualties
+        Function to handle casualties.
+
+        The safe time for resin overheat and fuel element failure are determined in the
+        run simulation function
         """
         # Check if injection of air casualty is ocurring before calculating other casualties.
         if self.injection_of_air_flag == True and self.status == 0 and self.time_since_safe > 60:
@@ -456,22 +529,47 @@ class NuclearReactorSimulator:
     #################################################################################################
         
     def injection_of_air(self):
+        """
+        The calc_pressure() function has determined that an injection of air casualty is ocurring
+        during a charging operation.
+
+        The casualty() function has determined the degree of the casualty.
+
+        The following functions have dependencies with the injection of air flag:
+            - calc_pressure(), pressure must be updated before calculated hydrogen and total gas
+            - calc_h2() 
+            - calc_total_gas()
+            - calc_radioactivity()
+
+        These parameters are dependent on eachother and must be calculated in a specific order.
+        """
         self.calc_pressure()    # Pressure must be updated before h2 and total gas
-        self.pressure_updated = True
         self.calc_total_gas()   # Total gas must be updated before h2
-        self.total_gas_updated = True
         self.calc_h2()
-        self.h2_updated = True
+        self.calc_radioactivity()
 
     def resin_overheat(self):
+        """
+        The call to the casualty() function this iteration has determined that a resin overheat
+        casualty is ocurring and determined the degree of the casualty. The following functions
+        have dependencies with the resin overheat flag:
+            - calc_pH()
+            - calc_temperature()
+            - calc_radioactivity()
+
+        These parameters are independent of eachother and can be calculated in any order.
+        """
         self.calc_pH()
-        self.pH_updated = True
         self.calc_temperature()
-        self.temp_updated = True
         self.calc_radioactivity()
-        self.radioactivity_updated = True
 
     def fuel_element_failure(self):
+        """
+        The call to the casualty() function this iteration has determined that a fuel element
+        failure casualty is ocurring and determined the degree of the casualty. The following
+        functions have dependencies with the fuel element failure flag:
+            - calc_radioactivity()
+        """
         self.calc_radioactivity()
         self.radioactivity_updated = True
 
