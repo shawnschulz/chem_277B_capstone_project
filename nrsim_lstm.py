@@ -11,14 +11,15 @@
 
 
 import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, LSTM, Dense, Reshape
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Conv1D, MaxPooling1D, Flatten, TimeDistributed
 
 
 
 class NRSIM_LSTM:
 
-    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer, model_loss):
+    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer,
+                  model_loss, model_metrics, conv_layer=False, nfilters=64, cact ='relu', cpool=2):
         
         """
         Initialize an LSTM model
@@ -39,28 +40,44 @@ class NRSIM_LSTM:
             optimizer to run on model
         model_loss : string
             loss function   
+        model_metrics : list[str]
+            metrics 
+        conv_layer : bool
+            adds convolutional layer (optional)
+        nfilters : int
+            number of convolutional filters
+        cact : string
+            convolutional activation function
+        cpool : 
+            max pooling pool size
         """
         
         
 
-        # input layer
-        input_layer = Input(shape=(nTimesteps, nFeatures))
+       # intitializes model
+        self.model = Sequential()
 
-        # adds LSTM layers with specified number of neurons in each layer
-        x = LSTM(neurons[0], activation=activation_func, return_sequencs=True)(input_layer)
-        for L in range(1, len(neurons) - 1):
-           x = LSTM(neurons[L], activation=activation_func, return_sequences=True)(x)
-        x = LSTM(neurons[-1], activation=activation_func, return_sequences=False)(x)
+        # adds convolutional layer 
+        if conv_layer:
+            self.model.add(TimeDistributed(Conv1D(filters = nfilters, kernel_size = 3,
+                                             activation = cact), input_shape = (None, nTimesteps, nFeatures)))
+            self.model.add(TimeDistributed(MaxPooling1D(pool_size=cpool)))
+            self.model.add(TimeDistributed(Flatten()))
+       
+        # adds layers with specified number of neurons in each layer
+        for L in range(len(neurons) - 1):
+            if L == 0:
+                self.model.add(LSTM(neurons[L], activation=activation_func, input_shape = (nTimesteps, nFeatures),  
+                                    return_sequences=True))
+            else:  
+                self.model.add(LSTM(neurons[L], activation=activation_func, return_sequences=True))
+        self.model.add(LSTM(neurons[-1], activation=activation_func, return_sequences=False))
 
         # output layer
-        x = Dense(npredTimesteps * nFeatures)(x)
-        output = Reshape((npredTimesteps, nFeatures))(x)
-        
-        # model
-        self.model = Model(inputs=input_layer, outputs=output)
+        self.model.add(Dense(npredTimesteps))
 
         # compiling model
-        self.model.compile(optimizer=model_optimizer, loss=model_loss)
+        self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
 
     def fit(self, X, y, nEpochs, nBatches):
         '''fits model'''
