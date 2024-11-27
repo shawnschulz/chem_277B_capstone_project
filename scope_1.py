@@ -455,36 +455,43 @@ class NuclearReactorSimulator:
                 # Reduce pressure while venting
                 self.pressure = self.pressure - (pressure_red_rate * elapsed_time)
             
-        # Normal operation
+        # MODIFIED Normal operation
         def normal_operation():
-            # To Support the first time step
+            """
+            Simulate normal pressure oscillations during regular reactor operation.
+            Adjust pressure if it deviates from the normal operating range.
+            """
+            # Initialization for the first time step
             if self.time_now == 1:
-                self.pressure = 2099
-                # Initialize phase
-                self.phase = 0
-            # To deal with pressure above or below normal oscillations during normal operation
-            elif self.pressure > 2195:
-                self.pressure -= 1
+                self.pressure = 2099  # Start near the upper safe limit
+                self.phase = 0        # Initialize the oscillation phase
+                return
+
+            # Handle pressure deviations from the normal range
+            if self.pressure > 2195:
+                self.pressure -= 1  # Gradually bring pressure down
             elif self.pressure < 2005:
-                self.pressure += 1
-            # To Support every time step after the first step
+                self.pressure += 1  # Gradually bring pressure up
             else:
-                # Constants for oscillating pressure
-                mid = 2100
-                amp = 95
-                period = 60
-                press_diff = self.data_dict['Pressure'][-2] - self.data_dict['Pressure'][-1]
+                # Constants for sinusoidal oscillation
+                mid = 2100        # Midpoint of the oscillation
+                amp = 95          # Amplitude of oscillation
+                period = 60       # Period of oscillation (in arbitrary units)
 
-                # Determine where we are in phase
-                if press_diff < 0:
-                    # Adjust the phase for falling temperature
-                    self.phase = np.pi - np.arcsin((self.pressure - mid) / amp)
-                elif press_diff > 0:
-                    # Adjust the phase for rising temperature
-                    self.phase = np.arcsin((self.pressure - mid) / amp)
+                # Calculate phase update
+                if len(self.data_dict["Pressure"]) >= 2:
+                    prev_diff = self.data_dict["Pressure"][-1] - self.data_dict["Pressure"][-2]
+                    if prev_diff < 0:
+                        # Falling pressure
+                        self.phase = np.pi - np.arcsin((self.pressure - mid) / amp)
+                    elif prev_diff > 0:
+                        # Rising pressure
+                        self.phase = np.arcsin((self.pressure - mid) / amp)
 
-                # Update temperature based on the phase
+                # Increment the phase for continuous oscillation
                 self.phase += 2 * np.pi / period
+
+                # Update the pressure based on the sinusoidal oscillation
                 self.pressure = mid + amp * np.sin(self.phase)
             
         
