@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import MinMaxScaler
+
 
 class NuclearReactorSimulator:
     def __init__(self, pH_0 = 11.0,             # Initial pH
@@ -144,7 +148,8 @@ class NuclearReactorSimulator:
             self.append_data()
 
         # Save the data in a CSV file after all iterations are complete.
-        self.save_data("test_file")   
+        self.save_data("test_file.csv")   
+        self.graph_simulation("test_graph.png")
 
     ###################################################################################################
 
@@ -702,6 +707,47 @@ class NuclearReactorSimulator:
             - calc_radioactivity()
         """
         self.calc_radioactivity()
+
+    def normalize_values(self):
+        """
+        Normalizes the values in data and returns a copy of the normalized values
+        """
+        df = pd.DataFrame.from_dict(self.data_dict)
+        vent_gas = df["Vent Gas"]
+        time = df["Time"]
+        df.drop("Vent Gas", axis=1, inplace = True)
+        df.drop("Time", axis = 1, inplace = True)
+        #normalized_df=(df-df.min())/(df.max()-df.min())
+        # Can't have NaN values to visualize
+        df.dropna(axis=1, inplace=True)
+        scaler = MinMaxScaler()
+        column_names = df.columns
+        normalized_df = scaler.fit_transform(df)
+        normalized_df = pd.DataFrame(normalized_df, columns=column_names)
+        normalized_df["Vent Gas"] = vent_gas
+        normalized_df["Time"] = time
+        breakpoint()
+        return normalized_df 
+
+    def graph_simulation(self, filename):
+        df = self.normalize_values() 
+        # Drop the temperature for now since it doesn't really make sense
+        df.drop("Temperature", axis=1, inplace=True)
+# Customize the plot (optional)
+        plt.figure(figsize=(24,14),dpi=120)
+        legends=[]
+        for x in df.columns[:-1]:
+            legends.append(x)
+            plt.plot(df['Time'],df[x])
+            plt.legend(legends,loc='upper right',fontsize=8)
+        plt.xlabel('Time (milisecond)',fontsize=13.5,fontweight='bold')
+        plt.ylabel('Values',fontsize=13.5,fontweight='bold')
+        plt.title('Reactor Simulator Features over Time',fontsize=18,fontweight='bold')
+        #plt.xticks(df['Time'],rotation=35)
+        sns.despine()
+        plt.savefig(filename)
+
+
 
 
         
