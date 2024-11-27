@@ -715,6 +715,8 @@ class NuclearReactorSimulator:
         df = pd.DataFrame.from_dict(self.data_dict)
         vent_gas = df["Vent Gas"]
         time = df["Time"]
+        # Vent Gas and Time are special compared to the other features,
+        # (I don't think you have to remove vent gas but time makes sense to not normalize)
         df.drop("Vent Gas", axis=1, inplace = True)
         df.drop("Time", axis = 1, inplace = True)
         #normalized_df=(df-df.min())/(df.max()-df.min())
@@ -726,7 +728,6 @@ class NuclearReactorSimulator:
         normalized_df = pd.DataFrame(normalized_df, columns=column_names)
         normalized_df["Vent Gas"] = vent_gas
         normalized_df["Time"] = time
-        breakpoint()
         return normalized_df 
 
     def graph_simulation(self, filename):
