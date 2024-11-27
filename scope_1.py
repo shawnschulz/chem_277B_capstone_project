@@ -10,7 +10,6 @@ class NuclearReactorSimulator:
                  h2 = 50,                       # Initial hydrogen concentration
                  total_gas = 60,                # Initial total_gas concentration
                  radioactivity = 10.0,          # Initial radioactivity
-                 volume = 20000,                # Initial volume
                  ):
         """Initialize reactor simulator with initial conditions"""
         
@@ -25,12 +24,12 @@ class NuclearReactorSimulator:
         self.status = 0                         # safe
 
         # Casualty flags
-        self.injection_of_air_flag = False          # Flag for injection of air
-        self.injection_of_air_degree = False        # Determination for small or large
-        self.resin_overheat_flag = False            # Flag for resin overheat
-        self.resin_overheat_degree = False          # Determination for small or large
-        self.fuel_element_failure_flag = False      # Flag for fuel element failure
-        self.fuel_element_failure_degree = False    # Determination for small or large
+        self.injection_of_air_flag = None          # Flag for injection of air
+        self.injection_of_air_degree = None        # Determination for small or large
+        self.resin_overheat_flag = None            # Flag for resin overheat
+        self.resin_overheat_degree = None          # Determination for small or large
+        self.fuel_element_failure_flag = None      # Flag for fuel element failure
+        self.fuel_element_failure_degree = None    # Determination for small or large
 
         # Simulation parameters
         self.monitoring_pressure = True         # Sanity check to avoid overpressure casualty
@@ -76,12 +75,38 @@ class NuclearReactorSimulator:
         }
 ###########################################################################################################
 ###########################################################################################################
-# The following code will perform the simulation run
+# The following code will perform the simulation run.
 ###########################################################################################################
 ###########################################################################################################
 
     def run_simulation(self, simulation_time = 3*24*60):      # Simulation time of 4320 minutes (3 days)
-        """Run the simulation over the specified time range"""
+        """
+        Function to run the simulation.
+
+        How to interpret the code:
+            - The data is appended to the dictionary at the start of the iteration.
+            - The parameter update flags are reset for this iteration.
+            - If the logic to induce a casualty is met there is a call to the casualty() function.
+                - The casualty function will only allow one casualty to occur at a time and set
+                  the corresponding casualty flag to true.
+                - The casualty function will make a call to the respective casualty function to
+                  calculate reactor plant paramters for this iteration.
+                - Once a parameter has been calculated it's update flag is set to 'True'.
+            - Once the parameters have been calculated by the respective casualty function
+              we return to the run simulation function to call the reactor_plant_parameters() function.
+                - The reactor plant parameters function will calculate any remaining parameters that
+                  have not been calculated this iteration.
+            - Once the simulation loop is complete the dictionary is converted to a csv file.
+        
+        Note: The probability of an injection of air casualty ocurring is determined inside of
+        the function to calculate pressure. The reactor plant parameters function has triggers
+        built in to insert a charging operation if pH or hydrogen concentration is low. An injection
+        of air casualty can only occur during a charging operation.
+
+        Note: There are dependencies on the order of which some variables must be calculated.
+        Specifically, pressure must be calculated before total gas, and total gas must be
+        calculated before hydrogen.
+        """
 
         while self.time_now < simulation_time:
             # Append reactor plant parameters to the dictionary for the previous time step
@@ -104,8 +129,12 @@ class NuclearReactorSimulator:
             self.h2_updated = False
             self.radioactivity_updated = False
 
-            # Provide random chance each iteration for a resin overheat or fuel element failure to occur.
-            if self.time_since_safe >= 60 and self.status == 0:
+            # Only allow calls to the casualty function if a casualty is ocurring or if sufficient
+            # time has elapsed to allow the reactor to stabilize parameters.
+            if self.time_since_safe >= 180 or\
+                    self.injection_of_air_flag or\
+                    self.resin_overheat_flag or\
+                    self.fuel_element_failure_flag:
                 self.casualty()
 
             # Update remaining reactor plant parameters for this iteration
@@ -142,14 +171,15 @@ class NuclearReactorSimulator:
     def save_data(self, filename):
         """Get data for Simulator and save as CSV and return DataFrame"""
         data = pd.DataFrame.from_dict(self.data_dict)
-        data.to_csv(filename)
-        return pd.DataFrame.from_dict(self.data_dict)
+        data.to_csv(filename, index = False)
+        
 
 #################################################################################################
 #################################################################################################
-# The following function will calculate reactor plant parameters and determine the safety
-# conditon of the reactor each iteration of the simulation and determine if plant maintenance
-# is needed.
+# The following function will calculate reactor plant parameters if they have not already been
+# calculated. Triggers are implemented in this function to normalize pH, hydrogen, and total gas
+# during the simulation during normal operation and between casualties. If any of the calculated
+# parameters out out of their normal operating band for this iteration, the reactor is not safe.
 #################################################################################################
 #################################################################################################
 
@@ -329,7 +359,6 @@ class NuclearReactorSimulator:
         
         # Degas in progress
         elif self.vent_gas_in_progress:
-            self.vent_gas_start = self.time_now
             elapsed_time = self.time_now - self.vent_gas_start
             total_gas_red_rate = 0.5
             # Reduce total gas to 60 from some value greater than 70.
@@ -385,10 +414,8 @@ class NuclearReactorSimulator:
                     self.charging_start = self.time_now
                 
                 # Give some probability of an injection of air casualty occuring during the chemical addition
-                self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
-                
-                # Handle the casualty if it occurs during charging
-                if self.injection_of_air_flag:
+                if self.injection_of_air_flag is None and self.time_since_safe > 60:
+                    self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
                     self.casualty()
 
                 # Update variables linearly during chemical addition.
@@ -410,9 +437,11 @@ class NuclearReactorSimulator:
                         self.add_h2 = False
                         self.add_pH = False
                         self.charging_start = None
+                        self.injection_of_air_flag = None
+                        self.injection_of_air_degree = None
                 
         # Venting gas operation
-        elif self.degas:
+        elif self.degas and not self.charging_in_progress:
 
             if self.monitoring_pressure and self.pressure <= 2070:
                 return # do not vent in this condition (prevent underpressure condition)
@@ -429,7 +458,10 @@ class NuclearReactorSimulator:
 
         # Normal operation
         else:
-            pass
+            mid_pressure = 2100
+            amplitude = 95
+            period = 60
+            self.pressure = mid_pressure + amplitude * np.sin(2*np.pi * self.time_now / period)
 
         # Update the parameter flag
         self.pressure_updated = True
@@ -463,6 +495,7 @@ class NuclearReactorSimulator:
         Function to calculate the value of radioactivity for the current iteration. This function
         has dependencies on the following flags:
             - fuel_element_failure_flag
+            - injection_of_air_flag and injection_of_air_degree
         """
         # Fuel element failure casualty
         if self.fuel_element_failure_flag:
@@ -497,29 +530,37 @@ class NuclearReactorSimulator:
         run simulation function
         """
         # Check if injection of air casualty is ocurring before calculating other casualties.
-        if self.injection_of_air_flag == True and self.status == 0 and self.time_since_safe > 60:
-            self.injection_of_air_degree = random.choices([True, False], weights = [40, 60])[0]
-            self.h2_before_casualty = self.h2
+        if self.injection_of_air_flag:
+            # Ensure the degree is only calculated once per casualty
+            if self.injection_of_air_degree is None:
+                self.injection_of_air_degree = random.choices([True, False], weights = [40, 60])[0]
+                self.h2_before_casualty = self.h2
+            self.injection_of_air()
 
-            # Small injection of air
-            if self.injection_of_air_degree:
-                self.h2_decrease = random.uniform(5, self.h2_before_casualty)
-                self.injection_of_air()
-            else:
-                self.h2_decrease = self.h2_before_casualty
-                self.injection_of_air()
+        # Determine some random probability each iteration this function is called
+        # for a casualty to occur, unless a casualty is already ocurring.
+        if self.injection_of_air_flag is None and\
+                self.resin_overheat_flag is None and\
+                self.fuel_element_failure_flag is None:
+            casualties = ['resin_overheat', 'fuel_element_failure']
+            select_casualty = random.choices(casualties + [None], weights = [5, 5, 90])[0]
 
-        # Determine some random probability each iteration for a casualty to occur
-        casualties = ['resin_overheat', 'fuel_element_failure']
-        select_casualty = random.choices(casualties + [None], weights = [5, 5, 90])[0]
-        
-        if select_casualty == 'resin_overheat'and not self.injection_of_air_flag:
-            self.resin_overheat_flag = True
-            self.resin_overheat_degree = random.choices([True, False], weights = [30, 70])[0]
+            if select_casualty == 'resin_overheat':
+                self.resin_overheat_flag = True
+            elif select_casualty == 'fuel_element_failure':
+                self.fuel_element_failure_flag = True
+
+        # Resin overheat casualty   
+        if self.resin_overheat_flag:
+            # Ensure the degree is only calculated once per casualty
+            if self.resin_overheat_degree is None:
+                self.resin_overheat_degree = random.choices([True, False], weights = [30, 70])[0]
             self.resin_overheat()
-        elif select_casualty == 'fuel_element_failure'and not self.injection_of_air_flag:
-            self.fuel_element_failure_flag = True
-            self.fuel_element_failure_degree = random.choices([True, False], weights = [20, 80])[0]
+        # Fuel element failure casualty
+        elif self.fuel_element_failure_flag:
+            # Ensure the degree is only calculated once per casualty
+            if self.fuel_element_failure_degree is None:
+                self.fuel_element_failure_degree = random.choices([True, False], weights = [20, 80])[0]
             self.fuel_element_failure()
 
     #################################################################################################
@@ -571,7 +612,6 @@ class NuclearReactorSimulator:
             - calc_radioactivity()
         """
         self.calc_radioactivity()
-        self.radioactivity_updated = True
 
 
         
