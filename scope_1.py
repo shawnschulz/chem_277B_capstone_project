@@ -32,7 +32,7 @@ class NuclearReactorSimulator:
         self.fuel_element_failure_degree = None    # Determination for small or large
 
         # Simulation parameters
-        self.monitoring_pressure = True         # Sanity check to avoid overpressure casualty
+        self.monitoring_pressure = None        # Sanity check to avoid overpressure casualty
         self.vent_gas_in_progress = False       # Are we venting gas (reducing TG)
         self.vent_gas_start = None              # Venting start time
         self.charging_in_progress = False       # Are we currently charging to the plant
@@ -44,6 +44,8 @@ class NuclearReactorSimulator:
         self.degas = False                      # Flag for degas
         self.time_now = 0                       # (minutes) Current simulation time
         self.time_since_safe = 0
+        self.pH_start = None
+
 
         # Parameter Update Flags
         self.pressure_updated = False
@@ -272,18 +274,18 @@ class NuclearReactorSimulator:
 
         # Charging pH chemicals
         elif self.add_pH and self.charging_in_progress:
+            if self.pH_start is None:
+                self.pH_start = self.pH
             elapsed_time = self.time_now - self.charging_start
+            # Update pH while charging
             if elapsed_time <= self.charging_duration:
-                # Update pH while charging
-                self.pH += 0.6 * elapsed_time / self.charging_duration
-            else:
-                self.add_pH = False
-                self.charging_in_progress = False
+                step_increase = (10.8 - self.pH_start) / self.charging_duration
+                self.pH += step_increase
 
         # Normal Operation
         else:
-            # pH varies as a function of time and reactor power
-            self.pH += - 0.0025 * self.time_now * np.exp(self.power / 100)
+            # pH varies as a function of time since charging and reactor power
+            self.pH -= 0.002 * (self.power / 100)
 
         # Update the parameter flag
         self.pH_updated = True
@@ -407,39 +409,51 @@ class NuclearReactorSimulator:
             pumps = random.choice([1, 2, 3]) 
             self.charging_duration ={1:30, 2:20, 3:10}[pumps]
 
+            if self.monitoring_pressure is None:
+                # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
+                # to prevent an overpressure casualty while performing the chemical addition.
+                self.monitoring_pressure = random.choices([True, False], weights = [95, 5])[0]
+
             # Determine if charging can begin
             if not self.charging_in_progress:
                 if self.monitoring_pressure and self.pressure > 2060:
                     normal_operation()
+                else: 
+                    # Commence Charging operation
+                    self.charging_in_progress = True
             
-                # Commence Charging operation
-                self.charging_in_progress = True
+            if self.charging_in_progress:
                 if self.charging_start is None:
                     self.charging_start = self.time_now
-                
+
                 # Give some probability of an injection of air casualty occuring during the chemical addition
                 if self.injection_of_air_flag is None and self.time_since_safe > 60:
-                    self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
-                    self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
-                    self.h2_before_casualty = self.h2
+                    prob_inj_of_air = random.choices([True, False], weights = [0, 100])[0]
+                    if prob_inj_of_air:
+                        self.injection_of_air_flag = random.choices([True, False], weights = [30, 70])[0]
+                        self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
+                        self.h2_before_casualty = self.h2
 
                 # Update variables linearly during chemical addition.
                 elapsed_time = self.time_now - self.charging_start
                 if elapsed_time <= self.charging_duration:
+                    # Determine step increase per iteration
+                    step_increase = 100 / self.charging_duration
+                    self.pressure += step_increase
+                    
+                    #Q = 30 * pumps          # Charging rate
+                    #pressure_increase = 1000 * Q * elapsed_time / (20000 + Q * elapsed_time)
+                    #self.pressure += pressure_increase
 
-                    # Update pressure while charging.
-                    Q = 30 * pumps          # Charging rate
-                    pressure_increase = 3000 * Q * elapsed_time / (20000 + Q * elapsed_time)
-                    self.pressure += pressure_increase
-
-                    # End the chemical addition after the duration.
-                    if elapsed_time >= self.charging_duration:
-                        self.charging_in_progress = False
-                        self.add_h2 = False
-                        self.add_pH = False
-                        self.charging_start = None
-                        self.injection_of_air_flag = None
-                        self.injection_of_air_degree = None
+                # End the chemical addition after the duration.
+                else:
+                    self.charging_in_progress = False
+                    self.add_h2 = False
+                    self.add_pH = False
+                    self.charging_start = None
+                    self.injection_of_air_flag = None
+                    self.injection_of_air_degree = None
+                    self.pH_start = None
         
         def degas():
             if self.monitoring_pressure and self.pressure <= 2070:
@@ -472,25 +486,12 @@ class NuclearReactorSimulator:
                 # Constants for oscillating pressure
                 mid = 2100
                 amp = 95
-                period = 60
-                press_diff = self.data_dict['Pressure'][-2] - self.data_dict['Pressure'][-1]
+                period = 120
+                angular_frequency = (2 * np.pi) / period
+                normal_pressure = mid + amp * np.sin(angular_frequency * self.time_now)
 
-                # Determine where we are in phase
-                if press_diff < 0:
-                    # Adjust the phase for falling temperature
-                    self.phase = np.pi - np.arcsin((self.pressure - mid) / amp)
-                elif press_diff > 0:
-                    # Adjust the phase for rising temperature
-                    self.phase = np.arcsin((self.pressure - mid) / amp)
+                self.pressure = normal_pressure
 
-                # Update temperature based on the phase
-                self.phase += 2 * np.pi / period
-                self.pressure = mid + amp * np.sin(self.phase)
-            
-        
-        # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
-        # to prevent an overpressure casualty while performing the chemical addition.
-        self.monitoring_pressure = random.choices([True, False], weights = [95, 5])[0]
 
         # Charging operation
         if self.add_pH or self.add_h2:
@@ -621,7 +622,7 @@ class NuclearReactorSimulator:
                 self.resin_overheat_flag is None and\
                 self.fuel_element_failure_flag is None:
             casualties = ['resin_overheat', 'fuel_element_failure']
-            select_casualty = random.choices(casualties + [None], weights = [5, 5, 90])[0]
+            select_casualty = random.choices(casualties + [None], weights = [0, 0, 100])[0]
 
             if select_casualty == 'resin_overheat':
                 self.resin_overheat_flag = True
