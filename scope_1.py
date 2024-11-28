@@ -360,19 +360,26 @@ class NuclearReactorSimulator:
         """
         # Injection of air casualty
         if self.injection_of_air_flag:
-            # Small injection of air casualty
-            if self.injection_of_air_degree:
-                pass
-            # Large injection of air casualty
+            elapsed_time = self.time_now - self.charging_start
+            if elapsed_time <= self.charging_duration:
+                # Small injection of air casualty
+                if self.injection_of_air_degree:
+                    # gradually increase total gas
+                    target_total_gas = 70
+                    self.total_gas += (target_total_gas - self.total_gas) * (elapsed_time / self.charging_duration)
+                # Large injection of air casualty
+                else:
+                    # jump to target value
+                    self.total_gas = 90
             else:
-                pass
+                self.injection_of_air_flag = None
         
         # Degas in progress
         elif self.vent_gas_in_progress:
             elapsed_time = self.time_now - self.vent_gas_start
             total_gas_red_rate = 0.5
             # Reduce total gas to 60 from some value greater than 70.
-            self.total_gas = self.total_gas - total_gas_red_rate * elapsed_time
+            self.total_gas = max(60, self.total_gas - total_gas_red_rate * elapsed_time)
 
             # End the venting of gas after reaching goal.
             if self.total_gas <= 60:
@@ -383,7 +390,8 @@ class NuclearReactorSimulator:
         # Normal operation
         else:
             # Total gas varies as a function of hydrogen
-            pass
+            hydrogen_ratio = self.h2 / 50
+            self.total_gas = 60 + 10 * (hydrogen_ratio - 1)
 
         # Update the parameter flag
         self.total_gas_updated = True
@@ -487,6 +495,8 @@ class NuclearReactorSimulator:
                     elif prev_diff > 0:
                         # Rising pressure
                         self.phase = np.arcsin((self.pressure - mid) / amp)
+                else:
+                    self.phase = 0 # default phase if not enough datapoints
 
                 # Increment the phase for continuous oscillation
                 self.phase += 2 * np.pi / period
@@ -555,15 +565,19 @@ class NuclearReactorSimulator:
                 mid = 500
                 amp = 14
                 period = 60
-                temp_diff = self.data_dict['Temperature'][-2] - self.data_dict['Temperature'][-1]
+                #temp_diff = self.data_dict['Temperature'][-2] - self.data_dict['Temperature'][-1]
 
                 # Determine where we are in phase
-                if temp_diff < 0:
-                    # Adjust the phase for falling temperature
-                    self.phase = np.pi - np.arcsin((self.temp - mid) / amp)
-                elif temp_diff > 0:
-                    # Adjust the phase for rising temperature
-                    self.phase = np.arcsin((self.temp - mid) / amp)
+                if len(self.data_dict["Temperature"]) >= 2:
+                    temp_diff = self.data_dict["Temperature"][-1] - self.data_dict["Temperature"][-2]
+                    if temp_diff < 0:
+                        # Adjust the phase for falling temperature
+                        self.phase = np.pi - np.arcsin((self.temp - mid) / amp)
+                    elif temp_diff > 0:
+                        # Adjust the phase for rising temperature
+                        self.phase = np.arcsin((self.temp - mid) / amp)
+                else:
+                    self.phase = 0 # default phase if not enough data points
 
                 # Update temperature based on the phase
                 self.phase += 2 * np.pi / period
@@ -583,26 +597,53 @@ class NuclearReactorSimulator:
         """
         # Fuel element failure casualty
         if self.fuel_element_failure_flag:
-            # Small fuel element failure
-            if self.fuel_element_failure_degree:
-                pass
-            # Large fuel element failure
+            if self.fuel_element_failure_start is None:
+                self.fuel_element_failure_start = self.time_now
+            elapsed_time = self.time_now - (self.fuel_element_failure_start or self.time_now)
+            if elapsed_time <= 10:  # Gradual increase over 10 minutes
+                # Small failure
+                if self.fuel_element_failure_degree:  
+                    self.radioactivity += 0.5 
+                # Large failure
+                else:
+                    self.radioactivity += 2.0 
             else:
-                pass
+                # Reset flag after the casualty duration
+                self.fuel_element_failure_flag = None
+                self.fuel_element_failure_start = None
 
-        # Large injection of air casualty
-        elif self.injection_of_air_flag and not self.injection_of_air_degree:
-            pass
-        
-        # Large resin overheat casualty
-        elif self.resin_overheat_start is not None and not self.resin_overheat_degree:
-            pass
+        # Injection of Air Casualty
+        elif self.injection_of_air_flag:
+            elapsed_time = self.time_now - self.charging_start
+            if elapsed_time <= self.charging_duration:
+                # Small injection of air
+                if self.injection_of_air_degree:  
+                    self.radioactivity += 0.3 
+                # Large injection of air
+                else:  
+                    self.radioactivity += 1.0 
+            else:
+                # Reset the injection flag after the casualty duration
+                self.injection_of_air_flag = None
+
+        # Resin Overheat Casualty
+        elif self.resin_overheat_flag:
+            elapsed_time = self.time_now - (self.resin_overheat_start or self.time_now)
+            # Small resin overheat
+            if self.resin_overheat_degree: 
+                self.radioactivity += 0.2 
+            # Large resin overheat
+            else:
+                self.radioactivity += 0.8 
 
         # Normal Operation
         else:
-            pass
+            # Maintain radioactivity within safe range (e.g., 10–15 rad)
+            if self.radioactivity < 10:
+                self.radioactivity += 0.1  # Gradually return to the lower limit
+            elif self.radioactivity > 15:
+                self.radioactivity -= 0.1  # Gradually return to the upper limit
 
-        # Update the parameter flag
         self.radioactivity_updated = True
 
         return self.radioactivity
@@ -712,4 +753,25 @@ class NuclearReactorSimulator:
 
 
         
-            
+# Simulate fuel element failure
+simulator = NuclearReactorSimulator()
+
+# Small fuel element failure
+simulator.fuel_element_failure_flag = True
+simulator.fuel_element_failure_degree = True  # Small failure
+
+fuel_failure_radioactivity = []
+for t in range(11):
+    simulator.time_now = t
+    simulator.calc_radioactivity()
+    fuel_failure_radioactivity.append(simulator.radioactivity)
+
+# Plot results
+import matplotlib.pyplot as plt
+plt.plot(fuel_failure_radioactivity, label="Fuel Element Failure (Small)")
+plt.xlabel("Time (minutes)")
+plt.ylabel("Radioactivity (rad)")
+plt.legend()
+plt.title("Radioactivity During Fuel Element Failure")
+plt.grid(True)
+plt.show()
