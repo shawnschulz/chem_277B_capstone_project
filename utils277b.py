@@ -49,8 +49,10 @@ def cross_validation_accuracy(model, X: pd.DataFrame, y: np.ndarray, nKFold: int
 
 def scale(data: np.ndarray):
     # for scaling
-    scaler = MinMaxScaler(feature_range=(0,1))
-    return scaler.fit_transform(data)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(data)
+    
+    return scaler, scaled_data
 
 def plot_correlation_matrix(data: pd.DataFrame, title: str):
     
@@ -154,5 +156,26 @@ def best_model(param_grid: dict, model, X: pd.DataFrame, y: np.ndarray, nKFold: 
     
     return grid_search.best_estimator_
 
+
+
+def prep_lstm_data(data, n_past, m_future):
+
+    '''
+    transforms data into lstm training data
+
+    Inputs: 
+    n_past - n data points in the past
+    m_future - number of data points in the future to predict
+    data - data points from time series
+
+    Returns: 
+    X - numpy array where each row is a series of n past data points 
+    y - numpy array where each row is a series of m future data points
+    '''
+     
+    X = [data[i - n_past:i] for i in range(n_past, len(data) - m_future + 1)]
+    y = [data[i:i + m_future] for i in range(n_past, len(data) - m_future + 1)]
+    
+    return np.array(X), np.array(y)
 
 
