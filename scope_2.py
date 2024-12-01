@@ -24,11 +24,11 @@ class NuclearReactorSimulator:
         self.status = 0                         # safe
 
         # Casualty flags
-        self.injection_of_air_flag = None          # Flag for injection of air
+        self.injection_of_air_flag = False         # Flag for injection of air
         self.injection_of_air_degree = None        # Determination for small or large
-        self.resin_overheat_flag = None            # Flag for resin overheat
+        self.resin_overheat_flag = False            # Flag for resin overheat
         self.resin_overheat_degree = None          # Determination for small or large
-        self.fuel_element_failure_flag = None      # Flag for fuel element failure
+        self.fuel_element_failure_flag = False      # Flag for fuel element failure
         self.fuel_element_failure_degree = None    # Determination for small or large
 
         # Simulation parameters
@@ -255,7 +255,7 @@ class NuclearReactorSimulator:
     ########################################################################################################
 
     def charging_operation(self):
-        if self.injection_of_air_flag is not None:
+        if self.injection_of_air_flag: 
             return     
           
         if self.monitoring_pressure is None:
@@ -585,7 +585,7 @@ class NuclearReactorSimulator:
             # Determine if an injection of air casualty is ocurring.
             if self.charging_in_progress and self.charging_start is not None:
                 # An injection of air casualty will not occur while restoring hydrogen.
-                if self.injection_of_air_flag is None and not self.add_h2:
+                if self.injection_of_air_flag and not self.add_h2:
                     # Determine probability of an injection of air occurring
                     prob_inj_of_air = random.choices([True, False], weights = [40, 60])[0]
                     if prob_inj_of_air:
@@ -604,11 +604,11 @@ class NuclearReactorSimulator:
                     self.fuel_element_failure_flag = True
 
         # Make a call to the casualty function if a casualty is in progress
-        if self.injection_of_air_flag is not None:
+        if self.injection_of_air_flag:
             self.injection_of_air()
-        elif self.resin_overheat_flag is not None:
+        elif self.resin_overheat_flag:
             self.resin_overheat()
-        elif self.fuel_element_failure_flag is not None:
+        elif self.fuel_element_failure_flag:
             self.fuel_element_failure()
 
     ###################################################################################################
@@ -796,7 +796,7 @@ class NuclearReactorSimulator:
             # Set temp within band to avoid error in phase calculation
             self.temp = 513.5
             # Reset flags and state parameter
-            self.resin_overheat_flag = None
+            self.resin_overheat_flag = False 
             self.resin_overheat_degree = None
             self.resin_overheat_start = None
             self.initial_pH = None
@@ -845,14 +845,110 @@ class NuclearReactorSimulator:
         elapsed_time = self.time_now - self.fuel_element_failure_start
         if elapsed_time > 100:
             self.baseline_radioactivity = self.radioactivity
-            self.fuel_element_failure_flag = None
+            self.fuel_element_failure_flag = False 
             self.fuel_element_failure_degree = None
             self.initial_radioactivity = None
             self.fuel_element_failure_start = None
         
+    def normalize_values(self):
+        """
+        Normalizes the values in data and returns a copy of the normalized values
+        """
+        from sklearn.preprocessing import MinMaxScaler
+        df = pd.DataFrame.from_dict(self.data_dict)
+        time = df["Time"]
+        # Vent Gas and Time are special compared to the other features,
+        # (I don't think you have to remove vent gas but time makes sense to not normalize)
+        df.drop("Time", axis = 1, inplace = True)
+        #normalized_df=(df-df.min())/(df.max()-df.min())
+        # Can't have NaN values to visualize
+        df.dropna(axis=1, inplace=True)
+        scaler = MinMaxScaler()
+        column_names = df.columns
+        normalized_df = scaler.fit_transform(df)
+        normalized_df = pd.DataFrame(normalized_df, columns=column_names)
+        normalized_df["Time"] = time
+        return normalized_df 
 
+    def graph_simulation(self, filename, input_data_frame = None, normalize_values=True, plot_specific_features=None):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        if input_data_frame:
+            df = input_data_frame
+        elif normalize_values:
+            df = self.normalize_values() 
+        else:
+            df = pd.DataFrame(self.data_dict)
+# Customize the plot (optional)
+        plt.figure(figsize=(24,14),dpi=120)
+        colors = plt.rcParams["axes.prop_cycle"]()
+
+        if plot_specific_features:
+            legends=[]
+            for x in plot_specific_features: 
+                c = next(colors)["color"]
+                legends.append(x)
+                plt.plot(df['Time'],df[x], color=c)
+                plt.legend(legends,loc='upper right',fontsize=8)
+                plt.show()
+            plt.xlabel('Time (milisecond)',fontsize=13.5,fontweight='bold')
+            plt.ylabel('Values',fontsize=13.5,fontweight='bold')
+            plt.title('Reactor Simulator Features over Time',fontsize=18,fontweight='bold')
+            #plt.xticks(df['Time'],rotation=35)
+            sns.despine()
+            plt.show()
+            plt.savefig(filename)
+            return
+
+
+        legends=[]
+        for x in df.columns[:-1]:
+            c = next(colors)["color"]
+            legends.append(x)
+            plt.plot(df['Time'],df[x], color=c)
+            plt.legend(legends,loc='upper right',fontsize=8)
+        plt.xlabel('Time (milisecond)',fontsize=13.5,fontweight='bold')
+        plt.ylabel('Values',fontsize=13.5,fontweight='bold')
+        plt.title('Reactor Simulator Features over Time',fontsize=18,fontweight='bold')
+        #plt.xticks(df['Time'],rotation=35)
+        sns.despine()
+        plt.show()
+        plt.savefig(filename)
     
+    def graph_safety_level(self, safety_features = ["Reactor Safety", "Injection of Air", "Resin Overheat", "Fuel Element Failure"]):
+        import matplotlib.pyplot as plt
+
+        label_mappings= {"pH":"pH", "Hydrogen":"cc/kg of hydrogen", 
+                       "Total Gas":"cc/kg", 
+                       "Temperature":"Degrees Farenheit",
+                       "Radioactivity":"rad",
+                       "Reactor Safety":"", 
+                       "Injection of Air":"",
+                       "Resin Overheat":"",
+                       "Fuel Element Failure":"",
+                       "Pressure":"psi",
+                       "Power":"kW"}
+
+        colors = plt.rcParams["axes.prop_cycle"]()
+        df = pd.DataFrame(self.data_dict)
+        fig, axs = plt.subplots(len(safety_features), figsize=(10,8))
+        fig.suptitle('Simulated Reactor Safety Over Time')
+        for i in range(len(safety_features)): 
+            c = next(colors)["color"]
+            x = safety_features[i]
+            label = label_mappings[x]
+            axs[i].plot(df['Time'], df[x], color = c)
+            axs[i].set_title(x)
+            axs[i].set_xlabel("Time (miliseconds)")
+            axs[i].set_ylabel(label)
+            
+        plt.subplots_adjust(wspace=1, hspace=3)
+
+
+
 
 
         
             
+
+
