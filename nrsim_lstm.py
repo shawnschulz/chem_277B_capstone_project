@@ -12,14 +12,13 @@
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Conv1D, MaxPooling1D, Flatten, TimeDistributed
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Conv1D, MaxPooling1D, Flatten, TimeDistributed
 
 
 
 class NRSIM_LSTM:
 
-    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer,
-                  model_loss, model_metrics, conv_layer=False, nfilters=64, cact ='relu', cpool=2):
+    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer, model_loss, model_metrics, dropout=0, conv_layer=False, nfilters=64, cact ='relu', cpool=2):
         
         """
         Initialize an LSTM model
@@ -42,6 +41,8 @@ class NRSIM_LSTM:
             loss function   
         model_metrics : list[str]
             metrics 
+        dropout : float
+            dropout rate
         conv_layer : bool
             adds convolutional layer (optional)
         nfilters : int
@@ -60,14 +61,19 @@ class NRSIM_LSTM:
         # adds convolutional layer 
         if conv_layer:
 
+            # input layer
             self.model.add(Input(shape=(None, nTimesteps, nFeatures)))
             
+            # convolutional layer
             self.model.add(TimeDistributed(Conv1D(filters = nfilters, kernel_size = 3,
                                              activation = cact)))
+            # max pooling layer
             self.model.add(TimeDistributed(MaxPooling1D(pool_size=cpool)))
             self.model.add(TimeDistributed(Flatten()))
        
         else:
+            
+            # input layer (assuming no convolutional layer)
             self.model.add(Input(shape=(nTimesteps, nFeatures)))
 
         # adds lstm layers with specified number of neurons in each layer
@@ -75,8 +81,17 @@ class NRSIM_LSTM:
         
             self.model.add(LSTM(neurons[L], activation=activation_func, 
                                 return_sequences=True))
-    
+
+            # dropout 
+            if dropout > 0:
+                self.model.add(Dropout(dropout)) 
+
+        # final LSTM layer
         self.model.add(LSTM(neurons[-1], activation=activation_func, return_sequences=False))
+        
+        # dropout after final layer
+        if dropout > 0:
+            self.model.add(Dropout(dropout)) 
 
         # output layer
         self.model.add(Dense(npredTimesteps))
