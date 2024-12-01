@@ -31,7 +31,7 @@ class NRSIM_LSTM:
         activation_func: string
             activation function
         nTimesteps : int
-            number of timesteps from training data
+            number of past timesteps from training data
         nFeatures : int
             number of features from training data
         npredTimesteps : int
@@ -57,17 +57,19 @@ class NRSIM_LSTM:
        # intitializes model
         self.model = Sequential()
 
-
-        self.model.add(Input(shape=(nTimesteps, nFeatures)))
-
         # adds convolutional layer 
         if conv_layer:
+
+            self.model.add(Input(shape=(None, nTimesteps, nFeatures)))
             
             self.model.add(TimeDistributed(Conv1D(filters = nfilters, kernel_size = 3,
                                              activation = cact)))
             self.model.add(TimeDistributed(MaxPooling1D(pool_size=cpool)))
             self.model.add(TimeDistributed(Flatten()))
        
+        else:
+            self.model.add(Input(shape=(nTimesteps, nFeatures)))
+
         # adds lstm layers with specified number of neurons in each layer
         for L in range(len(neurons) - 1):
         
