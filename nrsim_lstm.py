@@ -94,7 +94,7 @@ class NRSIM_LSTM:
             self.model.add(Dropout(dropout)) 
 
         # output layer
-        self.model.add(Dense(npredTimesteps))
+        self.model.add(Dense(13))
 
         # compiling model
         self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
