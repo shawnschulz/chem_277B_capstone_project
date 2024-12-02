@@ -38,14 +38,14 @@ class NuclearReactorSimulator:
         self.charging_in_progress = False       # Are we currently charging to the plant
         self.charging_start = None              # Charging start time
         self.resin_overheat_start = None        # Resin overheat start time
-        self.charging_duration = None           # Charging duration based on number of pumps.
+        self.charging_duration = 180 # Charging duration based on number of pumps.
         self.degas_duration = None              # degas duration based on tg concentration 
         self.add_pH = False                     # Flag for adding pH (plant maintenance)
         self.add_h2 = False                     # Flag for adding hydrogen (plant maintenance)
         self.degas = False                      # Flag for degas (plant maintenance)
         self.time_now = 0                       # (minutes) Current simulation time
         self.time_since_safe = 0                # Amount of time reactor status 0
-        self.pH_start = None                    # Used for injection of air casualty and charging pH
+        self.pH_start = 0                       # Used for injection of air casualty and charging pH
         self.h2_start = None                    # Used for injection of air casualty and charging h2
         self.total_gas_start = None             # Used for injection of air casualty
         self.dissolved_nitrogen = 10            # Used for injection of air casualty
@@ -312,8 +312,8 @@ class NuclearReactorSimulator:
                 self.monitoring_pressure = None
                 self.charging_in_progress = False
                 self.charging_start = None
-                self.charging_duration = None
-                self.pH_start = None
+                self.charging_duration = 180 
+                self.pH_start = 0  
                 self.add_pH = False
                 self.add_h2 = False
                 self.h2_start = None
@@ -594,14 +594,16 @@ class NuclearReactorSimulator:
                         
             # Determine if a resin overheat or fuel element failure casualty is ocurring.               
             else:
-                casualties = ['resin_overheat', 'fuel_element_failure']
+                casualties = ['injection_of_air', 'resin_overheat', 'fuel_element_failure']
                 # Determine probability of resin overheat or fuel element failure occurring.
-                select_casualty = random.choices(casualties + [None], weights = [10, 10, 80])[0]
+                select_casualty = random.choices(casualties + [None], weights = [1, 10, 10, 79])[0]
 
                 if select_casualty == 'resin_overheat':
                     self.resin_overheat_flag = True
                 elif select_casualty == 'fuel_element_failure':
                     self.fuel_element_failure_flag = True
+                elif select_casualty == 'injection_of_air':
+                    self.injection_of_air_flag = True
 
         # Make a call to the casualty function if a casualty is in progress
         if self.injection_of_air_flag:
@@ -648,8 +650,8 @@ class NuclearReactorSimulator:
         delta_nitrogen = self.delta_oxygen * (0.78 / 0.22) * 0.075
         step_increase_n2 = delta_nitrogen / self.charging_duration
 
-        #if self.charging_start is None:
-            #self.charging_start = self.time_now
+        if self.charging_start is None:
+            self.charging_start = self.time_now
         elapsed_time = self.time_now - self.charging_start
         # Hydrogen decreases while charging 
         if elapsed_time < self.charging_duration - 1:
@@ -726,11 +728,11 @@ class NuclearReactorSimulator:
             self.charging_in_progress = False
             self.charging_start = None
             self.charging_duration = None
-            self.pH_start = None
+            self.pH_start = 0 
             self.add_pH = False
             self.add_h2 = False
             self.h2_start = None
-            self.injection_of_air_flag = None
+            self.injection_of_air_flag = False 
             self.injection_of_air_degree = None
             self.h2_start = None
             self.delta_oxygen = None
