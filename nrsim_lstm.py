@@ -18,7 +18,7 @@ from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Conv1D, MaxPool
 
 class NRSIM_LSTM:
 
-    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer, model_loss, model_metrics, dropout=0, conv_layer=False, nfilters=64, cact ='relu', cpool=2):
+    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer, model_loss, model_metrics, dropout=0, conv_layer=False, nfilters=64, cact ='relu', cpool=2, task = "regression", n_classes=6):
         
         """
         Initialize an LSTM model
@@ -93,8 +93,11 @@ class NRSIM_LSTM:
         if dropout > 0:
             self.model.add(Dropout(dropout)) 
 
-        # output layer
-        self.model.add(Dense(13))
+        if task == "regression":
+            # output layer
+            self.model.add(Dense(nFeatures))
+        else:
+            self.model.add(Dense(n_classes))
 
         # compiling model
         self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
