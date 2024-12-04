@@ -168,6 +168,16 @@ class NuclearReactorSimulator:
         else:
             self.status = 0
 
+        ###########################################################################
+        # Reactor status following recovery from a casualty, flags set back to false
+        if self.status == 0:
+            self.injection_of_air_flag = False          # Flag for injection of air
+            self.injection_of_air_degree = False        # Determination for small or large
+            self.resin_overheat_flag = False            # Flag for resin overheat
+            self.resin_overheat_degree = False          # Determination for small or large
+            self.fuel_element_failure_flag = False      # Flag for fuel element failure
+            self.fuel_element_failure_degree = False   
+
     def plant_maintenance(self):
         # Give the reactor plant workers an 80% chance of monitoring reactor plant pressure
         # to prevent an overpressure casualty while performing the chemical addition.
