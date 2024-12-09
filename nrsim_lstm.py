@@ -12,13 +12,19 @@
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Conv1D, MaxPooling1D, Flatten, TimeDistributed
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Reshape, \
+Conv1D, MaxPooling1D, Flatten, TimeDistributed
 
 
 
 class NRSIM_LSTM:
 
-    def __init__(self, neurons, activation_func, nTimesteps, nFeatures, npredTimesteps, model_optimizer, model_loss, model_metrics, dropout=0, conv_layer=False, nfilters=64, cact ='relu', cpool=2):
+    def __init__(self, neurons, activation_func, 
+                nTimesteps, nFeatures, npredTimesteps, npredFeatures, 
+                model_optimizer, model_loss, model_metrics, 
+                dropout=0, 
+                conv_layer=False, nfilters=64, cact ='relu', cpool=2,
+                classify=False):
         
         """
         Initialize an LSTM model
@@ -30,11 +36,13 @@ class NRSIM_LSTM:
         activation_func: string
             activation function
         nTimesteps : int
-            number of past timesteps from training data
+            number of past timesteps
         nFeatures : int
-            number of features from training data
+            number of past features
         npredTimesteps : int
             number of predicted timesteps
+        npredFeatures : int
+            number of predicted features
         model_optimizer : string
             optimizer to run on model
         model_loss : string
@@ -49,8 +57,11 @@ class NRSIM_LSTM:
             number of convolutional filters
         cact : string
             convolutional activation function
-        cpool : 
+        cpool : int
             max pooling pool size
+        classify: bool
+            reactor saftey classification
+
         """
         
         
@@ -92,9 +103,27 @@ class NRSIM_LSTM:
         # dropout after final layer
         if dropout > 0:
             self.model.add(Dropout(dropout)) 
+        
 
-        # output layer
-        self.model.add(Dense(npredTimesteps))
+        if classify: 
+            
+            model_loss = "binary_crossentropy"
+            
+            if npredFeatures == 1:
+                # output layer
+                self.model.add(Dense(1, activation="sigmoid"))
+            else:
+                self.model.add(Dense(npredTimesteps * npredFeatures, activation="sigmoid"))
+                self.model.add(Reshape((npredTimesteps, npredFeatures)))
+
+        else:
+
+            if npredFeatures == 1:
+                # output layer
+                self.model.add(Dense(npredTimesteps))
+            else:
+                self.model.add(Dense(npredTimesteps * npredFeatures))
+                self.model.add(Reshape((npredTimesteps, npredFeatures)))
 
         # compiling model
         self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
