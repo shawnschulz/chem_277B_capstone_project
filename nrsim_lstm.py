@@ -12,7 +12,7 @@
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, Conv1D, MaxPooling1D, Flatten, TimeDistributed
+from tensorflow.keras.layers import Input, LSTM, Reshape, Dense, Dropout, Conv1D, MaxPooling1D, Flatten, TimeDistributed
 
 
 
@@ -62,7 +62,7 @@ class NRSIM_LSTM:
         if conv_layer:
 
             # input layer
-            self.model.add(Input(shape=(None, nTimesteps, nFeatures)))
+            self.model.add(Input(shape=(nTimesteps, nFeatures)))
             
             # convolutional layer
             self.model.add(TimeDistributed(Conv1D(filters = nfilters, kernel_size = 3,
@@ -97,7 +97,7 @@ class NRSIM_LSTM:
             # output layer
             self.model.add(Dense(nFeatures))
         else:
-            self.model.add(Dense(n_classes))
+            self.model.add(Dense(nFeatures))
 
         # compiling model
         self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
