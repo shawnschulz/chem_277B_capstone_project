@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import random
-from scope_2 import NuclearReactorSimulator
+from NR_Simulation import NuclearReactorSimulator
 
 sim = NuclearReactorSimulator()
 sim.run_simulation()
