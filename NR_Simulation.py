@@ -55,6 +55,9 @@ class NuclearReactorSimulator:
         self.baseline_radioactivity = 10        # Used for fuel element failure casualty
         self.initial_radioactivity = None       # Used for resin overheat casualty
         self.fuel_element_failure_start = None  # Used for fuel element failure casualty
+        self.p_transition_start = None          # Used for smoothing pressure change after charging
+        self.p_transition_start_pressure = None # Used for smoothing pressure change after charging
+        self.p_transition_duration = None       # Used for smoothing pressure change after charging
         
         
         # Parameter Update Flags
@@ -92,7 +95,7 @@ class NuclearReactorSimulator:
 ###########################################################################################################
 ###########################################################################################################
 
-    def run_simulation(self, simulation_time = 3*24*60):      # Simulation time of 4320 minutes (3 days)
+    def run_simulation(self, simulation_time = 3*24*60):      #3*24*60 Simulation time of 4320 minutes (3 days)
         """
         Function to run the simulation.
 
@@ -145,7 +148,7 @@ class NuclearReactorSimulator:
             self.append_data()
 
         # Save the data in a CSV file after all iterations are complete.
-        self.save_data("test_file")   
+        self.save_data("Sim_only_large_resin_overheat")   
 
     ###################################################################################################
 
@@ -205,9 +208,12 @@ class NuclearReactorSimulator:
         # Degas Operation
         if self.degas and not self.charging_in_progress:
             self.vent_gas()
+
         # Charging operation
-        elif (self.add_pH or self.add_h2) and not self.vent_gas_in_progress:
-            self.charging_operation()
+        if self.p_transition_start is None:
+            if (self.add_pH or self.add_h2) and not self.vent_gas_in_progress:
+                self.charging_operation()
+        
         
         ##################################################################################
         # Calculate reactor plant parameters for this iteration if not already done.
@@ -286,7 +292,7 @@ class NuclearReactorSimulator:
 
             # Update variables linearly during chemical addition.
             elapsed_time = self.time_now - self.charging_start
-            if elapsed_time < self.charging_duration - 1:
+            if elapsed_time <= self.charging_duration - 1:
                     
                 # Update Pressure
                 step_increase_pressure = 100 / self.charging_duration
@@ -308,7 +314,7 @@ class NuclearReactorSimulator:
                     self.h2_updated = True
 
             # End the chemical addition after the duration.
-            if elapsed_time >= self.charging_duration - 1:
+            else:
                 self.monitoring_pressure = None
                 self.charging_in_progress = False
                 self.charging_start = None
@@ -317,7 +323,10 @@ class NuclearReactorSimulator:
                 self.add_pH = False
                 self.add_h2 = False
                 self.h2_start = None
-                
+                self.p_transition_duration = self.calc_pressure_smoothing()
+                self.p_transition_start = self.time_now          
+                self.p_transition_start_pressure = self.pressure
+                self.pressure = self.calc_pressure()                    
         
     ########################################################################################################
 
@@ -327,7 +336,6 @@ class NuclearReactorSimulator:
         """
         # Determine if we have met our target.
         if self.total_gas <= 60:
-            
             return
         
         if self.monitoring_pressure is None:
@@ -384,68 +392,52 @@ class NuclearReactorSimulator:
     ###################################################################################################
     ###################################################################################################
 
+    def calc_pressure_smoothing(self):
+        """
+        Function to calculate the smoothing duration for pressure after conducting a charging
+        operation.
+        """
+
+        period = 120
+        angular_frequency = (2 * np.pi) / period
+
+        # Determine the current phase
+        current_phase = (angular_frequency * self.time_now) % (2 * np.pi)
+
+        # Determine when pressure will cross the middle value of oscillation again based on current phase
+        next_mid_crossing = ((2 * np.pi) - current_phase) % (2 * np.pi) / angular_frequency
+
+        return int(next_mid_crossing)
+
     def calc_pressure(self):
         """
-        Function to calculate the value of pressure for the current iteration. This function has
-        dependencies on the following flags:
-            - self.monitoring_pressure (calculated locally)
-            - self.add_pH and self.add_h2
-            - self.degas
-        This function will determine the value of the injection of air casualty flag when the
-        charging operation occurs.
+        Function to calculate the value of pressure for the current iteration.
         """                                  
-        # To deal with pressure above or below normal oscillations during normal operation
-        if self.pressure > 2195:
-            self.pressure -= 10
-        elif self.pressure < 2005:
-            self.pressure += 10
-        #elif self.data_dict["Chemical Addition"][-1]
-        # To Support every time step after the first step
+        
+        # Constants for oscillating pressure
+        mid = 2100
+        amp = 95
+        period = 120
+        angular_frequency = (2 * np.pi) / period
+
+        normal_pressure = mid + amp * np.sin(angular_frequency * self.time_now)
+        
+        # Smooth pressure after charging back to normal pressure
+        if self.p_transition_start is not None:
+            elapsed_time = self.time_now - self.p_transition_start
+
+            if elapsed_time < self.p_transition_duration:
+                t = elapsed_time / self.p_transition_duration
+                self.pressure = (1 -t) * self.p_transition_start_pressure + t * normal_pressure
+            else:
+                self.pressure = normal_pressure
+                self.p_transition_duration = None
+                self.p_transition_start = None
+                self.p_transition_start_pressure = None
+
+        # Normal operation
         else:
-            # Constants for oscillating pressure
-            mid = 2100
-            amp = 95
-            period = 120
-            angular_frequency = (2 * np.pi) / period
-
-            normal_pressure = mid + amp * np.sin(angular_frequency * self.time_now)
             self.pressure = normal_pressure
-
-            #last_normal_pressure = mid + amp * np.sin(angular_frequency * self.data_dict["Time"][-1])
-
-            # Pressure is on simulation time.
-            #if self.pressure_normal_time is None:
-                #normal_pressure = mid + amp * np.sin(angular_frequency * self.time_now)
-                #self.pressure = normal_pressure
-
-            # Some operation has ocurred and affected pressure
-            #if self.pressure != last_normal_pressure:
-                    
-                #if self.charging_start is not None or self.vent_gas_start is not None:
-                    # Determine which time to check
-                    #if self.charging_start is not None:
-                        #time = self.charging_start - 1
-                    #elif self.vent_gas_start is not None:
-                        #time = self.vent_gas_start - 1
-                        
-                    #self.charging_start = None
-                    #self.vent_gas_start = None
-                    #pressure_two = self.data_dict["Pressure"][time]
-                    #pressure_one = self.data_dict["Pressure"][time - 1]
-                    
-                #if self.pressure > 2200:
-
-                    
-                #if (pressure_two - pressure_one) < 0:
-                    # Use time correction to the left
-                    #pass
-                #else:
-                    # Use time correction to the right
-                    #pass
-
-                #left_time = ...
-                #right_time = ...
-                #time_corr = min(left_time, right_time)           
         
         # Update the parameter flag
         self.pressure_updated = True
@@ -456,10 +448,7 @@ class NuclearReactorSimulator:
     
     def calc_pH(self):
         """
-        Function to calculate the value of pH for the current iteration. This function has
-        dependencies on the following flags:
-            - resin_overheat_start
-            - add_pH and charging_in_progress
+        Function to calculate the value of pH for the current iteration.
         """     
         # pH varies as a function of time since charging and reactor power
         self.pH -= 0.002 * (self.power / 100)
@@ -473,11 +462,7 @@ class NuclearReactorSimulator:
 
     def calc_h2(self):
         """
-        Function to calculate the value of hydrogen for the current iteration. This function
-        has dependencies on the following flags:
-            - injection_of_air_flag
-            - add_h2 and charging_in_progress
-            - vent_gas_in_progress
+        Function to calculate the value of hydrogen for the current iteration.
         """
         # Hydrogen varies as a function of pressure (Henrys Law)
         h2_conc_pressure = self.h2 * ((self.pressure - self.data_dict['Pressure'][-1]) / 2200)
@@ -492,10 +477,7 @@ class NuclearReactorSimulator:
     
     def calc_total_gas(self):
         """
-        Function to calculate the value of total gas for the current iteration. This function
-        has dependencies on the following flags:
-            - injection_of_air_flag
-            - vent_gas_in_progress
+        Function to calculate the value of total gas for the current iteration.
         """        
         self.total_gas = self.h2 + self.dissolved_nitrogen + self.dissolved_oxygen
 
@@ -528,10 +510,7 @@ class NuclearReactorSimulator:
 
     def calc_radioactivity(self):
         """
-        Function to calculate the value of radioactivity for the current iteration. This function
-        has dependencies on the following flags:
-            - fuel_element_failure_flag
-            - injection_of_air_flag and injection_of_air_degree
+        Function to calculate the value of radioactivity for the current iteration.
         """
         
         if self.time_since_safe > 180 and self.radioactivity > self.baseline_radioactivity:
@@ -542,23 +521,6 @@ class NuclearReactorSimulator:
             filter_efficiency = 0.95
             self.radioactivity *= filter_efficiency
         
-        # Fuel element failure casualty
-        if self.fuel_element_failure_flag:
-            # Small fuel element failure
-            if self.fuel_element_failure_degree:
-                pass
-            # Large fuel element failure
-            else:
-                pass
-        
-        # Large resin overheat casualty
-        elif self.resin_overheat_start is not None and not self.resin_overheat_degree:
-            pass
-
-        # Normal Operation
-        else:
-            pass
-
         # Update the parameter flag
         self.radioactivity_updated = True
 
@@ -587,16 +549,16 @@ class NuclearReactorSimulator:
                 # An injection of air casualty will not occur while restoring hydrogen.
                 if self.injection_of_air_flag is None and not self.add_h2:
                     # Determine probability of an injection of air occurring
-                    prob_inj_of_air = random.choices([True, False], weights = [40, 60])[0]
+                    prob_inj_of_air = random.choices([True, False], weights = [0, 100])[0]
                     if prob_inj_of_air:
-                        self.injection_of_air_flag = random.choices([True, False], weights = [70, 30])[0]
-                        self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
+                        self.injection_of_air_flag = random.choices([True, False], weights = [0, 100])[0]
+                        self.injection_of_air_degree = random.choices([True, False], weights = [100, 0])[0]
                         
             # Determine if a resin overheat or fuel element failure casualty is ocurring.               
             else:
                 casualties = ['resin_overheat', 'fuel_element_failure']
                 # Determine probability of resin overheat or fuel element failure occurring.
-                select_casualty = random.choices(casualties + [None], weights = [10, 10, 80])[0]
+                select_casualty = random.choices(casualties + [None], weights = [100, 0, 0])[0]
 
                 if select_casualty == 'resin_overheat':
                     self.resin_overheat_flag = True
@@ -636,20 +598,20 @@ class NuclearReactorSimulator:
         if self.extra_oxygen is None:
             self.extra_oxygen = random.randint(2, 10)
         
-        # Small injection of air casualty
+        # Determine amount of oxygen added
         if self.delta_oxygen is None:
-            self.delta_oxygen = random.uniform(5, self.h2_start)
-
-        # Large injection of air casualty
-        else:
-            self.delta_oxygen = self.h2_start + self.extra_oxygen
+            # Small injection of air casualty
+            if self.injection_of_air_degree:
+                self.delta_oxygen = random.uniform(5, self.h2_start)
+            # Large injection of air casualty
+            else:
+                self.delta_oxygen = self.h2_start + self.extra_oxygen
 
         # Limit the contribution of nitrogen to total gas
         delta_nitrogen = self.delta_oxygen * (0.78 / 0.22) * 0.075
         step_increase_n2 = delta_nitrogen / self.charging_duration
 
-        #if self.charging_start is None:
-            #self.charging_start = self.time_now
+        # Charging is in progress
         elapsed_time = self.time_now - self.charging_start
         # Hydrogen decreases while charging 
         if elapsed_time < self.charging_duration - 1:
@@ -720,7 +682,7 @@ class NuclearReactorSimulator:
                     self.total_gas = self.h2 + self.dissolved_oxygen + self.dissolved_nitrogen
                     self.total_gas_updated = True
 
-        if elapsed_time >= self.charging_duration - 1:
+        else: 
             # End the chemical addition after the duration.
             self.monitoring_pressure = None
             self.charging_in_progress = False
@@ -734,7 +696,11 @@ class NuclearReactorSimulator:
             self.injection_of_air_degree = None
             self.h2_start = None
             self.delta_oxygen = None
-            self.extra_oxygen = None    
+            self.extra_oxygen = None  
+            self.p_transition_duration = self.calc_pressure_smoothing()
+            self.p_transition_start = self.time_now          
+            self.p_transition_start_pressure = self.pressure
+            self.pressure = self.calc_pressure()
         
     ################################################################################################
                     
@@ -750,12 +716,12 @@ class NuclearReactorSimulator:
         """
         # Ensure the degree is only calculated once per casualty
         if self.resin_overheat_degree is None:
-            self.resin_overheat_degree = random.choices([True, False], weights = [60, 40])[0]
+            self.resin_overheat_degree = random.choices([True, False], weights = [0, 100])[0]
             # Determine how long the casualty is ocurring for
             self.time_above_limit = random.randint(8, 24)
             # Obtain some random target temperature for the casualty above the limit
             if self.resin_overheat_degree:
-                self.target_temp = random.randint(520, 520)
+                self.target_temp = random.randint(520, 530)
             else:
                 self.target_temp = random.randint(540, 550)
         
