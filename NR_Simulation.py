@@ -100,28 +100,27 @@ class NuclearReactorSimulator:
         Function to run the simulation.
 
         How to interpret the code:
-            - The 'parameter update' flags are reset for this iteration.
-            - If the logic to induce a casualty is met there is a call to the casualty() function.
-                - The casualty function will only allow one casualty to occur at a time and set
-                  the corresponding casualty flag to true.
-                - The casualty function will make a call to the respective casualty function to
-                  calculate reactor plant paramters for this iteration.
-                - Once a parameter has been calculated it's update flag is set to 'True'.
-            - Once the parameters have been calculated by the respective casualty function
-              we return to the run simulation function to call the reactor_plant_parameters() function.
+            - Time is incremented by one and the 'parameter update' flags are reset each iteration.
+            - A call to the casualty() method is made:
+                - The probability of a casualty ocurring is randomly determined each iteration.
+                - Only one casualty can occur at a time.
+                - The probability of an injection of air casualty ocurring is only calculated if
+                  a charging operation is in progress.
+                - If a parameter is updated, its update flag is set to true. Once all of the parameters
+                  affected by the casualty are updated we return to the simulation loop.
+            - A call to the reactor_plant_parameters() function is made:
                 - The reactor plant parameters function will calculate any remaining parameters that
                   have not been calculated this iteration.
             - The data is appended to the dictionary at the end of the iteration.
             - Once the simulation loop is complete the dictionary is converted to a csv file.
         
-        Note: The probability of an injection of air casualty ocurring is determined inside of
-        the function to calculate pressure. The reactor plant parameters function has triggers
-        built in to insert a charging operation if pH or hydrogen concentration is low. An injection
-        of air casualty can only occur during a charging operation.
+        Note: The reactor plant parameters function has triggers built in to insert a charging operation
+        if pH or hydrogen concentration is low. An injection of air casualty can only occur during a
+        charging operation.
 
         Note: There are dependencies on the order of which some variables must be calculated.
-        Specifically, pressure must be calculated before total gas, and total gas must be
-        calculated before hydrogen.
+        Specifically, pressure must be calculated before hydrogen, and hydrogen must be calculated
+        before total gas.
         """
         # Populate initial values into the dictionary
         self.append_data()
@@ -148,7 +147,7 @@ class NuclearReactorSimulator:
             self.append_data()
 
         # Save the data in a CSV file after all iterations are complete.
-        self.save_data("Sim_only_large_resin_overheat")   
+        self.save_data("Sim_only_large_injection_of_air")   
 
     ###################################################################################################
 
@@ -549,16 +548,16 @@ class NuclearReactorSimulator:
                 # An injection of air casualty will not occur while restoring hydrogen.
                 if self.injection_of_air_flag is None and not self.add_h2:
                     # Determine probability of an injection of air occurring
-                    prob_inj_of_air = random.choices([True, False], weights = [0, 100])[0]
+                    prob_inj_of_air = random.choices([True, False], weights = [100, 100])[0]
                     if prob_inj_of_air:
-                        self.injection_of_air_flag = random.choices([True, False], weights = [0, 100])[0]
-                        self.injection_of_air_degree = random.choices([True, False], weights = [100, 0])[0]
+                        self.injection_of_air_flag = random.choices([True, False], weights = [100, 0])[0]
+                        self.injection_of_air_degree = random.choices([True, False], weights = [0, 100])[0]
                         
             # Determine if a resin overheat or fuel element failure casualty is ocurring.               
             else:
                 casualties = ['resin_overheat', 'fuel_element_failure']
                 # Determine probability of resin overheat or fuel element failure occurring.
-                select_casualty = random.choices(casualties + [None], weights = [100, 0, 0])[0]
+                select_casualty = random.choices(casualties + [None], weights = [0, 0, 100])[0]
 
                 if select_casualty == 'resin_overheat':
                     self.resin_overheat_flag = True
@@ -654,9 +653,9 @@ class NuclearReactorSimulator:
                 step_increase_rad = rad_increase / self.charging_duration
                 self.radioactivity += step_increase_rad
                 self.radioactivity_updated = True
-
+                
                 # Update hydrogen and total gas proportional to time.
-                time_proportion = (self.h2_start / (self.delta_oxygen + self.extra_oxygen)) * self.charging_duration
+                time_proportion = (self.h2_start / (self.delta_oxygen + self.extra_oxygen + self.h2_start)) * self.charging_duration
                 # Time for hydrogen to decrease to zero.
                 if elapsed_time <= time_proportion:
                     # Update hydrogen
@@ -674,7 +673,7 @@ class NuclearReactorSimulator:
                     # Update hydrogen
                     self.h2 = 0
                     self.h2_updated = True
-
+                    
                     # Update total gas
                     step_increase_o2 = self.extra_oxygen / (self.charging_duration - time_proportion)
                     self.dissolved_oxygen += step_increase_o2
