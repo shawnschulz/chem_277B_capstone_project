@@ -95,7 +95,7 @@ class NuclearReactorSimulator:
 ###########################################################################################################
 ###########################################################################################################
 
-    def run_simulation(self, simulation_time = 3*24*60):      #3*24*60 Simulation time of 4320 minutes (3 days)
+    def run_simulation(self, simulation_time = 14*24*60):      #3*24*60 Simulation time of 4320 minutes (3 days)
         """
         Function to run the simulation.
 
@@ -147,7 +147,7 @@ class NuclearReactorSimulator:
             self.append_data()
 
         # Save the data in a CSV file after all iterations are complete.
-        self.save_data("Sim_only_large_injection_of_air")   
+        self.save_data("Sim_two_weeks_all_casualties")   
 
     ###################################################################################################
 
@@ -548,16 +548,16 @@ class NuclearReactorSimulator:
                 # An injection of air casualty will not occur while restoring hydrogen.
                 if self.injection_of_air_flag is None and not self.add_h2:
                     # Determine probability of an injection of air occurring
-                    prob_inj_of_air = random.choices([True, False], weights = [100, 100])[0]
+                    prob_inj_of_air = random.choices([True, False], weights = [40, 60])[0]
                     if prob_inj_of_air:
-                        self.injection_of_air_flag = random.choices([True, False], weights = [100, 0])[0]
-                        self.injection_of_air_degree = random.choices([True, False], weights = [0, 100])[0]
+                        self.injection_of_air_flag = random.choices([True, False], weights = [60, 40])[0]
+                        self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
                         
             # Determine if a resin overheat or fuel element failure casualty is ocurring.               
             else:
                 casualties = ['resin_overheat', 'fuel_element_failure']
                 # Determine probability of resin overheat or fuel element failure occurring.
-                select_casualty = random.choices(casualties + [None], weights = [0, 0, 100])[0]
+                select_casualty = random.choices(casualties + [None], weights = [15, 15, 70])[0]
 
                 if select_casualty == 'resin_overheat':
                     self.resin_overheat_flag = True
@@ -715,7 +715,7 @@ class NuclearReactorSimulator:
         """
         # Ensure the degree is only calculated once per casualty
         if self.resin_overheat_degree is None:
-            self.resin_overheat_degree = random.choices([True, False], weights = [0, 100])[0]
+            self.resin_overheat_degree = random.choices([True, False], weights = [50, 50])[0]
             # Determine how long the casualty is ocurring for
             self.time_above_limit = random.randint(8, 24)
             # Obtain some random target temperature for the casualty above the limit
@@ -780,7 +780,7 @@ class NuclearReactorSimulator:
         """
         # Ensure the degree is only calculated once per casualty
         if self.fuel_element_failure_degree is None:
-            self.fuel_element_failure_degree = random.choices([True, False], weights = [80, 20])[0]
+            self.fuel_element_failure_degree = random.choices([True, False], weights = [50, 50])[0]
         
         if self.initial_radioactivity is None:
             if self.fuel_element_failure_degree:
