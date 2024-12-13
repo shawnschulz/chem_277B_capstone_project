@@ -95,7 +95,7 @@ class NuclearReactorSimulator:
 ###########################################################################################################
 ###########################################################################################################
 
-    def run_simulation(self, simulation_time = 14*24*60):      #3*24*60 Simulation time of 4320 minutes (3 days)
+    def run_simulation(self, simulation_time = 30*24*60):      #3*24*60 Simulation time of 4320 minutes (3 days)
         """
         Function to run the simulation.
 
@@ -147,7 +147,7 @@ class NuclearReactorSimulator:
             self.append_data()
 
         # Save the data in a CSV file after all iterations are complete.
-        self.save_data("Sim_two_weeks_all_casualties")   
+        self.save_data("Sim_one_month_all_casualties")   
 
     ###################################################################################################
 
@@ -540,29 +540,27 @@ class NuclearReactorSimulator:
             self.time_since_safe += 1
         else:
             self.time_since_safe = 0
-        
-        # Allow the reactor to be safe for some amount of time before inserting another casualty.
-        if self.time_since_safe > 180:
-            # Determine if an injection of air casualty is ocurring.
-            if self.charging_in_progress and self.charging_start is not None:
-                # An injection of air casualty will not occur while restoring hydrogen.
-                if self.injection_of_air_flag is None and not self.add_h2:
+        if self.resin_overheat_flag is None and self.fuel_element_failure_flag is None and self.injection_of_air_flag is None:
+            # Allow the reactor to be safe for some amount of time before inserting another casualty.
+            if self.time_since_safe > 120:
+                # Determine if an injection of air casualty is ocurring.
+                if self.charging_in_progress and not self.add_h2:
                     # Determine probability of an injection of air occurring
-                    prob_inj_of_air = random.choices([True, False], weights = [40, 60])[0]
+                    prob_inj_of_air = random.choices([True, False], weights = [100, 0])[0]
                     if prob_inj_of_air:
-                        self.injection_of_air_flag = random.choices([True, False], weights = [60, 40])[0]
+                        self.injection_of_air_flag = random.choices([True, False], weights = [80, 20])[0]
                         self.injection_of_air_degree = random.choices([True, False], weights = [60, 40])[0]
                         
-            # Determine if a resin overheat or fuel element failure casualty is ocurring.               
-            else:
-                casualties = ['resin_overheat', 'fuel_element_failure']
-                # Determine probability of resin overheat or fuel element failure occurring.
-                select_casualty = random.choices(casualties + [None], weights = [15, 15, 70])[0]
+                # Determine if a resin overheat or fuel element failure casualty is ocurring.               
+                else:
+                    casualties = ['resin_overheat', 'fuel_element_failure']
+                    # Determine probability of resin overheat or fuel element failure occurring.
+                    select_casualty = random.choices(casualties + [None], weights = [0.25, 0.25, 99.5])[0]
 
-                if select_casualty == 'resin_overheat':
-                    self.resin_overheat_flag = True
-                elif select_casualty == 'fuel_element_failure':
-                    self.fuel_element_failure_flag = True
+                    if select_casualty == 'resin_overheat':
+                        self.resin_overheat_flag = True
+                    elif select_casualty == 'fuel_element_failure':
+                        self.fuel_element_failure_flag = True
 
         # Make a call to the casualty function if a casualty is in progress
         if self.injection_of_air_flag is not None:
