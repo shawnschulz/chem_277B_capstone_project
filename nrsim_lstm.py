@@ -128,11 +128,11 @@ class NRSIM_LSTM:
         # compiling model
         self.model.compile(optimizer=model_optimizer, loss=model_loss, metrics=model_metrics)
 
-    def fit(self, X, y, nEpochs, nBatches, val_split, verb, shuf):
+    def fit(self, X, y, nEpochs, nBatches, val_split, verb, shuf, callbacks = None):
         '''fits model'''
         
         return self.model.fit(X, y, epochs=nEpochs, batch_size=nBatches, 
-                       validation_split=val_split, verbose=verb, shuffle=shuf)
+                       validation_split=val_split, verbose=verb, shuffle=shuf, callbacks = callbacks)
 
     
     def predict(self, X):
