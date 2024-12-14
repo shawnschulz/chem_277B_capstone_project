@@ -41,7 +41,7 @@ pip install -r requirements.txt
 Alternatively, you can install the latest version of the required packages individually.
 
 ```
-pip install numpy tensorflow pandas scikit-learn seaborn
+pip install numpy tensorflow pandas scikit-learn 
 ```
 
 ### How to Run the Simulation
