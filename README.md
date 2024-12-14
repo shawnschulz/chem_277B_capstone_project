@@ -11,9 +11,11 @@ This repository contains the following files:
     - `Archive` contains previous iterations of past work.
     - `Plots` contains several plots of LSTM predictions versus individual casualties.
     - `Simulation Data` contains CSV files used for training models.
+    - `Randomized Search` contains Jupyter notebooks used for Randomized Search hyperparameter tuning
 - The following files:
     - `NR_simulation.py` python source code for generating an artificial dataset, simulating a nuclear reactor.
     - `run_simulation.py` python source for running the simulation.
+    - `lstm_classification.ipynb` Notebook to run the Classification Model, generate confusion matrix and ROC curve
     - And a bunch of other files where we performed LSTM modelling and evaluation.
 
 ### How to Run the Simulation
