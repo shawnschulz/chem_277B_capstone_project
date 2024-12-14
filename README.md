@@ -15,8 +15,11 @@ This repository contains the following files:
 - The following files:
     - `NR_simulation.py` python source code for generating an artificial dataset, simulating a nuclear reactor.
     - `run_simulation.py` python source for running the simulation.
-    - `lstm_classification.ipynb` Notebook to train and test the Classification Model, generate confusion matrix and ROC curve
-    - And a bunch of other files where we performed LSTM modelling and evaluation.
+    - `nrsim_lstm.py` python source code for LSTM class.
+    - `lstm_test.ipynb` Notebook to test if LSTM class is functioning.
+    - `cnn_lstm_test.ipynb` Notebook to test LSTM class with convolution.
+    - `lstm_classification.ipynb` Notebook to train and test the Classification Model, generate confusion matrix and ROC curve.
+    - `lstm_forecasting.ipynb` Notebook to run LSTM and forecast parameters of nuclear reactor simulation.
 
 ### How to Run the Simulation
 
